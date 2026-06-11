@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Machine Log — Regent Garment Factory</title>
+<style>
+/* ── Reset & base ───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:      #1A2744;
+  --navy2:     #243560;
+  --orange:    #E8542A;
+  --yellow-bg: #FFF8D6;
+  --yellow-bd: #E8B800;
+  --blue-bg:   #E8F4FF;
+  --blue-bd:   #2196F3;
+  --blue-txt:  #0D6EBD;
+  --gray-bg:   #F5F6F8;
+  --gray-bd:   #DDE1E9;
+  --gray-txt:  #6B7280;
+  --text:      #1A1F2E;
+  --text-2:    #4B5563;
+  --success:   #16A34A;
+  --danger:    #DC2626;
+  --warn:      #D97706;
+  --white:     #FFFFFF;
+  --radius:    8px;
+  --shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+}
+html { font-size: 14px; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #ECEEF2;
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Layout ─────────────────────────────────────────────────── */
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* Top nav */
+.nav {
+  background: var(--navy);
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; }
+.nav-logo {
+  width: 30px; height: 30px; border-radius: 7px;
+  background: var(--orange);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: #fff; font-weight: 700;
+}
+.nav-title { color: #fff; font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.nav-sub   { color: rgba(255,255,255,.45); font-size: 10px; margin-top: 1px; }
+.nav-tabs  { display: flex; gap: 2px; }
+.nav-tab {
+  padding: 6px 14px; border-radius: 6px; border: none;
+  background: transparent; color: rgba(255,255,255,.55);
+  font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s;
+}
+.nav-tab:hover  { background: rgba(255,255,255,.08); color: #fff; }
+.nav-tab.active { background: rgba(255,255,255,.15); color: #fff; }
+
+/* Pages */
+.page { display: none; }
+.page.active { display: block; }
+
+/* Main content area */
+.main { max-width: 860px; margin: 0 auto; padding: 24px 16px 40px; }
+
+/* ── Cards / Sections ───────────────────────────────────────── */
+.card {
+  background: var(--white);
+  border: 1px solid var(--gray-bd);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  background: var(--gray-bg);
+  border-bottom: 1px solid var(--gray-bd);
+}
+.card-head-icon {
+  width: 22px; height: 22px; border-radius: 5px;
+  background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+}
+.card-head-label {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-2);
+}
+.card-body { padding: 14px 16px; }
+
+/* ── KPI bar ────────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  margin-bottom: 14px;
+}
+.kpi-card {
+  background: var(--white);
+  border: 1px solid var(--gray-bd);
+  border-radius: 10px; padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+.kpi-label { font-size: 10px; color: var(--gray-txt); margin-bottom: 4px; }
+.kpi-value { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; }
+.kpi-bar-wrap { height: 3px; background: var(--gray-bd); border-radius: 2px; margin-top: 7px; }
+.kpi-bar { height: 100%; border-radius: 2px; width: 0%; transition: width .4s, background .4s; }
+
+/* ── Field grid ─────────────────────────────────────────────── */
+.fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fg3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.fg4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+.mt10 { margin-top: 10px; }
+.mt14 { margin-top: 14px; }
+
+/* ── Field ──────────────────────────────────────────────────── */
+.f { display: flex; flex-direction: column; gap: 4px; }
+.f-label {
+  font-size: 11px; color: var(--text-2); font-weight: 500;
+  display: flex; align-items: center; gap: 5px;
+}
+.badge {
+  font-size: 9px; padding: 1px 5px; border-radius: 3px;
+  font-weight: 600; letter-spacing: .02em;
+}
+.badge-m { background: var(--yellow-bg); color: #8a5e00; border: 1px solid #E8B800; }
+.badge-f { background: var(--blue-bg);   color: var(--blue-txt); border: 1px solid var(--blue-bd); }
+
+/* Manual inputs */
+input.manual, select.manual {
+  height: 34px; padding: 0 10px;
+  border: 1.5px solid var(--yellow-bd);
+  border-radius: var(--radius);
+  background: var(--yellow-bg);
+  color: var(--text); font-size: 13px;
+  width: 100%; transition: border-color .15s, box-shadow .15s;
+}
+input.manual:focus, select.manual:focus {
+  outline: none;
+  border-color: #c49600;
+  box-shadow: 0 0 0 3px rgba(232,184,0,.18);
+  background: #fffcf0;
+}
+select.manual { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+
+/* Formula (read-only) inputs */
+input.formula {
+  height: 34px; padding: 0 10px;
+  border: 1.5px solid var(--blue-bd);
+  border-radius: var(--radius);
+  background: var(--blue-bg);
+  color: var(--blue-txt); font-size: 13px; font-weight: 600;
+  width: 100%; cursor: default;
+}
+.hint { font-size: 10px; color: var(--gray-txt); margin-top: 2px; font-style: italic; }
+
+/* ── Sub-divider ─────────────────────────────────────────────── */
+.sub-div {
+  font-size: 10px; font-weight: 600; color: var(--gray-txt);
+  text-transform: uppercase; letter-spacing: .07em;
+  border-bottom: 1px solid var(--gray-bd);
+  padding-bottom: 5px; margin: 14px 0 8px;
+  display: flex; align-items: center; gap: 5px;
+}
+
+/* ── Defect table ───────────────────────────────────────────── */
+.defect-table { width: 100%; border-collapse: collapse; }
+.defect-table th {
+  font-size: 10px; font-weight: 600; color: var(--gray-txt);
+  padding: 6px 8px; border-bottom: 1px solid var(--gray-bd); text-align: left;
+}
+.defect-table td { padding: 3px 4px; vertical-align: middle; }
+.defect-table td input.manual  { height: 30px; font-size: 12px; }
+.defect-table td input.formula { height: 30px; font-size: 12px; }
+.defect-table tfoot td {
+  background: var(--blue-bg);
+  padding: 7px 8px;
+  border-top: 1px solid var(--blue-bd);
+}
+.total-label { font-size: 11px; font-weight: 600; color: var(--blue-txt); }
+.total-val   { font-size: 13px; font-weight: 700; color: var(--blue-txt); }
+.rm-btn {
+  width: 24px; height: 24px; border-radius: 5px;
+  background: none; border: none; cursor: pointer;
+  color: #aaa; font-size: 14px; display: flex;
+  align-items: center; justify-content: center;
+}
+.rm-btn:hover { background: #fee2e2; color: var(--danger); }
+
+.add-row-btn {
+  width: 100%; margin-top: 8px; padding: 7px;
+  background: none; border: 1px dashed var(--gray-bd);
+  border-radius: var(--radius); cursor: pointer;
+  font-size: 11px; color: var(--gray-txt);
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  transition: all .15s;
+}
+.add-row-btn:hover { background: var(--gray-bg); border-color: #aaa; color: var(--text-2); }
+
+/* ── Action buttons ─────────────────────────────────────────── */
+.action-row { display: flex; gap: 8px; margin-top: 4px; }
+.btn {
+  height: 40px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: all .15s; border: none;
+}
+.btn-primary { flex: 1; background: var(--navy); color: #fff; }
+.btn-primary:hover { background: var(--navy2); }
+.btn-primary:disabled { background: #9aa3b2; cursor: not-allowed; }
+.btn-save    { flex: 1; background: var(--orange); color: #fff; }
+.btn-save:hover { background: #cc4820; }
+.btn-save:disabled { background: #f0a080; cursor: not-allowed; }
+.btn-outline {
+  padding: 0 16px; background: none;
+  border: 1.5px solid var(--gray-bd); color: var(--text-2);
+}
+.btn-outline:hover { background: var(--gray-bg); border-color: #aaa; }
+
+/* ── Toast ──────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  padding: 12px 18px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 500; color: #fff;
+  display: flex; align-items: center; gap: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.18);
+  transform: translateY(80px); opacity: 0;
+  transition: all .3s ease;
+  max-width: 340px;
+}
+.toast.show   { transform: translateY(0); opacity: 1; }
+.toast.ok     { background: var(--success); }
+.toast.err    { background: var(--danger); }
+.toast.loading { background: var(--navy); }
+
+/* ── Legend bar ─────────────────────────────────────────────── */
+.legend {
+  display: flex; gap: 14px; align-items: center;
+  margin-bottom: 14px; padding: 8px 12px;
+  background: var(--white); border: 1px solid var(--gray-bd);
+  border-radius: var(--radius);
+}
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); }
+.leg-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+/* ── API config banner ──────────────────────────────────────── */
+.api-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; margin-bottom: 14px;
+  background: var(--white); border: 1px solid var(--gray-bd);
+  border-radius: var(--radius); font-size: 11px;
+}
+.api-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.api-status-dot.ok  { background: var(--success); }
+.api-status-dot.err { background: var(--danger); }
+.api-status-dot.checking { background: var(--warn); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.api-url-input {
+  flex: 1; height: 26px; padding: 0 8px;
+  border: 1px solid var(--gray-bd); border-radius: 5px;
+  font-size: 11px; font-family: monospace; color: var(--text);
+  background: var(--gray-bg);
+}
+.api-url-input:focus { outline: none; border-color: var(--blue-bd); }
+.btn-check {
+  height: 26px; padding: 0 10px; font-size: 11px; font-weight: 600;
+  background: var(--navy); color: #fff; border: none;
+  border-radius: 5px; cursor: pointer;
+}
+.btn-check:hover { background: var(--navy2); }
+
+/* ── History table ──────────────────────────────────────────── */
+.history-toolbar {
+  display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+}
+.history-toolbar select {
+  height: 32px; padding: 0 10px; border: 1px solid var(--gray-bd);
+  border-radius: var(--radius); font-size: 12px; background: var(--white); color: var(--text);
+}
+.history-toolbar .btn { height: 32px; font-size: 12px; padding: 0 14px; }
+.htable-wrap { overflow-x: auto; }
+.htable { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 700px; }
+.htable th {
+  background: var(--navy); color: #fff;
+  padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.htable td { padding: 8px 10px; border-bottom: 1px solid var(--gray-bd); white-space: nowrap; }
+.htable tr:hover td { background: var(--gray-bg); }
+.htable tr:last-child td { border-bottom: none; }
+.pill {
+  display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 600;
+}
+.pill-green { background: #dcfce7; color: #15803d; }
+.pill-warn  { background: #fef9c3; color: #854d0e; }
+.pill-red   { background: #fee2e2; color: #991b1b; }
+.htable .export-btn {
+  padding: 3px 8px; font-size: 10px; font-weight: 600;
+  border: 1px solid var(--gray-bd); border-radius: 4px;
+  background: var(--white); cursor: pointer; color: var(--text-2);
+}
+.htable .export-btn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+.empty-state { text-align: center; padding: 40px; color: var(--gray-txt); font-size: 13px; }
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .fg3, .fg4 { grid-template-columns: 1fr 1fr; }
+  .nav-tabs .nav-tab span { display: none; }
+}
+@media (max-width: 400px) {
+  .fg2, .fg3, .fg4 { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ── Navigation ─────────────────────────────────────────── -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">R</div>
+    <div>
+      <div class="nav-title">Machine Log</div>
+      <div class="nav-sub">Regent Garment Factory</div>
+    </div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('form')">📋 <span>Nhập liệu</span></button>
+    <button class="nav-tab" onclick="showPage('history')">📊 <span>Lịch sử</span></button>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════
+     PAGE: FORM
+════════════════════════════════════════════════════════════ -->
+<div class="page active" id="page-form">
+<div class="main">
+
+  <!-- API status -->
+  <div class="api-banner">
+    <div class="api-status-dot checking" id="api-dot"></div>
+    <span id="api-status-text" style="color:var(--gray-txt)">Đang kết nối...</span>
+    <input class="api-url-input" id="api-url" value="https://regent-machine-log.onrender.com" placeholder="https://regent-machine-log.onrender.com">
+    <button class="btn-check" onclick="checkAPI()">Kiểm tra</button>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="leg-dot" style="background:var(--yellow-bg);border:1.5px solid var(--yellow-bd);"></div>
+      Nhập tay
+    </div>
+    <div class="legend-item">
+      <div class="leg-dot" style="background:var(--blue-bg);border:1.5px solid var(--blue-bd);"></div>
+      Công thức tự tính
+    </div>
+  </div>
+
+  <!-- KPI summary -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Target / day</div>
+      <div class="kpi-value" id="kv-target">—</div>
+      <div class="kpi-bar-wrap"><div class="kpi-bar" id="kb-target" style="background:#3B8BD4"></div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">EFF (%)</div>
+      <div class="kpi-value" id="kv-eff">—</div>
+      <div class="kpi-bar-wrap"><div class="kpi-bar" id="kb-eff"></div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">MC Utilization (%)</div>
+      <div class="kpi-value" id="kv-util">—</div>
+      <div class="kpi-bar-wrap"><div class="kpi-bar" id="kb-util"></div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Defect rate (%)</div>
+      <div class="kpi-value" id="kv-def">—</div>
+      <div class="kpi-bar-wrap"><div class="kpi-bar" id="kb-def" style="background:var(--danger)"></div></div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 1: Thông tin chung ── -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-icon">1</div>
+      <span class="card-head-label">Thông tin chung</span>
+    </div>
+    <div class="card-body">
+      <div class="fg3">
+        <div class="f">
+          <div class="f-label">Tên Dự Án <span class="badge badge-m">Nhập tay</span></div>
+          <select class="manual" id="f-project">
+            <option value="">-- Chọn dự án --</option>
+            <option>AI Garment Inspection</option>
+            <option>Auto Bagging &amp; Sealing</option>
+            <option>AGV Outdoor Navigation</option>
+            <option>Auto Loading Heat Press</option>
+            <option>Label/Barcode Inspection</option>
+          </select>
+        </div>
+        <div class="f">
+          <div class="f-label">MO / Color <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="text" id="f-mo" placeholder="VD: MO-2025-001 / Navy">
+        </div>
+        <div class="f">
+          <div class="f-label">Ngày <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="date" id="f-date">
+        </div>
+      </div>
+      <div class="fg3 mt10">
+        <div class="f">
+          <div class="f-label">Mã máy / Line <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="text" id="f-machine" placeholder="VD: M-07 / Line 3">
+        </div>
+        <div class="f">
+          <div class="f-label">SAM (testing) <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-sam" placeholder="0.000" step="0.001" oninput="recalc()">
+          <div class="hint">phút / sản phẩm</div>
+        </div>
+        <div class="f">
+          <div class="f-label">Standard Working Time <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-swt" placeholder="VD: 8" step="0.5" oninput="recalc()">
+          <div class="hint">giờ / ngày (8 = 8 giờ)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: Output ── -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-icon">2</div>
+      <span class="card-head-label">Output / Sản lượng</span>
+    </div>
+    <div class="card-body">
+
+      <!-- Target (công thức) -->
+      <div class="sub-div">📐 Target — công thức tự tính</div>
+      <div class="fg3">
+        <div class="f">
+          <div class="f-label">HC vận hành máy <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-hc" placeholder="VD: 0.5" step="0.1" min="0.1" oninput="recalc()">
+          <div class="hint">1 người / 2 máy → nhập 0.5</div>
+        </div>
+        <div class="f">
+          <div class="f-label">Target output / day (pcs) <span class="badge badge-f">Công thức</span></div>
+          <input class="formula" type="text" id="f-target-day" readonly placeholder="—">
+          <div class="hint">= (SWT × 60) ÷ SAM</div>
+        </div>
+        <div class="f">
+          <div class="f-label">Auto target output / h / HC <span class="badge badge-f">Công thức</span></div>
+          <input class="formula" type="text" id="f-auto-target-h" readonly placeholder="—">
+          <div class="hint">= 60 ÷ SAM ÷ HC</div>
+        </div>
+      </div>
+
+      <!-- Auto output -->
+      <div class="sub-div mt14">🤖 Auto output (máy tự động)</div>
+      <div class="fg2">
+        <div class="f">
+          <div class="f-label">Actual output / day / HC (pcs) <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-actual-hc" placeholder="0" oninput="recalc()">
+        </div>
+        <div class="f">
+          <div class="f-label">Actual output / day / MC (pcs) <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-actual-mc" placeholder="0" oninput="recalc()">
+        </div>
+      </div>
+      <div class="fg2 mt10">
+        <div class="f">
+          <div class="f-label">Auto output / h / HC (pcs) <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-auto-h-hc" placeholder="0" step="0.1" oninput="recalc()">
+        </div>
+        <div class="f">
+          <div class="f-label">Actual output / h / MC (pcs) <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-actual-h-mc" placeholder="0" step="0.1" oninput="recalc()">
+        </div>
+      </div>
+
+      <!-- Manual output -->
+      <div class="sub-div mt14">✋ Manual output (thủ công)</div>
+      <div class="fg2">
+        <div class="f">
+          <div class="f-label">Manual output / day / HC (pcs) <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-manual-day" placeholder="0" oninput="recalc()">
+        </div>
+        <div class="f">
+          <div class="f-label">Manual output / h / HC (pcs) <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-manual-h" placeholder="0" step="0.1" oninput="recalc()">
+        </div>
+      </div>
+
+      <!-- KPI computed -->
+      <div class="sub-div mt14">📊 KPI — công thức tự tính</div>
+      <div class="fg2">
+        <div class="f">
+          <div class="f-label">EFF (%) <span class="badge badge-f">Công thức</span></div>
+          <input class="formula" type="text" id="f-eff" readonly placeholder="—">
+          <div class="hint">= Actual HC ÷ Target/day × 100</div>
+        </div>
+        <div class="f">
+          <div class="f-label">Defect rate (%) <span class="badge badge-f">Công thức</span></div>
+          <input class="formula" type="text" id="f-defect-rate" readonly placeholder="—">
+          <div class="hint">= Total defect ÷ Actual MC × 100</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: Thời gian ── -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-icon">3</div>
+      <span class="card-head-label">Thời gian máy (phút)</span>
+    </div>
+    <div class="card-body">
+      <div class="fg4">
+        <div class="f">
+          <div class="f-label">Machine working time <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-wt" placeholder="0" oninput="recalc()">
+        </div>
+        <div class="f">
+          <div class="f-label">Change-over time <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-ct" placeholder="0" oninput="recalc()">
+        </div>
+        <div class="f">
+          <div class="f-label">Breakdown time <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-bt" placeholder="0" oninput="recalc()">
+        </div>
+        <div class="f">
+          <div class="f-label">Idle time <span class="badge badge-m">Nhập tay</span></div>
+          <input class="manual" type="number" id="f-it" placeholder="0" oninput="recalc()">
+        </div>
+      </div>
+      <div class="fg2 mt10">
+        <div class="f">
+          <div class="f-label">Total time (min) <span class="badge badge-f">Công thức</span></div>
+          <input class="formula" type="text" id="f-total-time" readonly placeholder="—">
+          <div class="hint">= Working + Change-over + Breakdown + Idle</div>
+        </div>
+        <div class="f">
+          <div class="f-label">MC Utilization (%) <span class="badge badge-f">Công thức</span></div>
+          <input class="formula" type="text" id="f-util" readonly placeholder="—">
+          <div class="hint">= Machine working time ÷ Total time × 100</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 4: Defect ── -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-icon">4</div>
+      <span class="card-head-label">Defect (pcs)</span>
+    </div>
+    <div class="card-body">
+      <table class="defect-table">
+        <thead>
+          <tr>
+            <th style="width:44%">Tên lỗi <span class="badge badge-m">Nhập tay</span></th>
+            <th style="width:26%">Số lượng (pcs) <span class="badge badge-m">Nhập tay</span></th>
+            <th style="width:24%">% / MC output <span class="badge badge-f">Công thức</span></th>
+            <th style="width:6%"></th>
+          </tr>
+        </thead>
+        <tbody id="defect-rows">
+          <!-- rows injected by JS -->
+        </tbody>
+        <tfoot>
+          <tr>
+            <td class="total-label">Total defect <span class="badge badge-f">Công thức</span></td>
+            <td colspan="3" class="total-val" id="total-defect">0 pcs</td>
+          </tr>
+        </tfoot>
+      </table>
+      <button class="add-row-btn" onclick="addDefectRow()">＋ Thêm loại lỗi</button>
+    </div>
+  </div>
+
+  <!-- ── Actions ── -->
+  <div class="action-row">
+    <button class="btn btn-outline" onclick="resetForm()">↺ Xoá form</button>
+    <button class="btn btn-primary" id="btn-save" onclick="submitForm(false)">
+      💾 Lưu vào DB
+    </button>
+    <button class="btn btn-save" id="btn-export" onclick="submitForm(true)">
+      ⬇ Lưu &amp; xuất Excel
+    </button>
+  </div>
+
+</div>
+</div><!-- end page-form -->
+
+
+<!-- ════════════════════════════════════════════════════════════
+     PAGE: HISTORY
+════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-history">
+<div class="main">
+  <div class="history-toolbar">
+    <select id="hist-project-filter" onchange="loadHistory()">
+      <option value="">Tất cả dự án</option>
+      <option>AI Garment Inspection</option>
+      <option>Auto Bagging &amp; Sealing</option>
+      <option>AGV Outdoor Navigation</option>
+      <option>Auto Loading Heat Press</option>
+      <option>Label/Barcode Inspection</option>
+    </select>
+    <button class="btn btn-outline" onclick="loadHistory()">🔄 Làm mới</button>
+  </div>
+  <div class="card">
+    <div class="htable-wrap">
+      <table class="htable">
+        <thead>
+          <tr>
+            <th>Ngày</th>
+            <th>Dự án</th>
+            <th>MO/Color</th>
+            <th>Target/day</th>
+            <th>Actual HC</th>
+            <th>EFF%</th>
+            <th>MC Util%</th>
+            <th>Defect rate%</th>
+            <th>Excel</th>
+          </tr>
+        </thead>
+        <tbody id="hist-body">
+          <tr><td colspan="9" class="empty-state">Nhấn "Làm mới" để tải dữ liệu</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div><!-- end page-history -->
+
+</div><!-- end app -->
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<!-- ════════════════════════════════════════════════════════════
+     JavaScript
+════════════════════════════════════════════════════════════ -->
+<script>
+// ── State ──────────────────────────────────────────────────────
+let API_BASE = localStorage.getItem('api_base') || 'https://regent-machine-log.onrender.com';
+
+// ── Init ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('api-url').value = API_BASE;
+  document.getElementById('f-date').valueAsDate = new Date();
+  addDefectRow();
+  addDefectRow();
+  recalc();
+  checkAPI();
+});
+
+// ── Page navigation ────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (name === 'history') loadHistory();
+}
+
+// ── API health check ───────────────────────────────────────────
+async function checkAPI() {
+  const url = document.getElementById('api-url').value.trim().replace(/\/$/, '');
+  API_BASE = url;
+  localStorage.setItem('api_base', url);
+  const dot  = document.getElementById('api-dot');
+  const text = document.getElementById('api-status-text');
+  dot.className = 'api-status-dot checking';
+  text.textContent = 'Đang kết nối...';
+  try {
+    const res = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(4000) });
+    const data = await res.json();
+    dot.className  = 'api-status-dot ok';
+    text.style.color = 'var(--success)';
+    text.textContent = `✓ Đã kết nối — ${API_BASE}`;
+  } catch(e) {
+    dot.className  = 'api-status-dot err';
+    text.style.color = 'var(--danger)';
+    text.textContent = `✗ Không kết nối được — kiểm tra server đang chạy chưa`;
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+const g  = id => document.getElementById(id);
+const gn = id => parseFloat(g(id)?.value) || 0;
+const sv = (id, v) => { if(g(id)) g(id).value = v; };
+
+// ── Recalc ─────────────────────────────────────────────────────
+function recalc() {
+  const sam = gn('f-sam'), swt = gn('f-swt'), hc = gn('f-hc');
+  const actualHC = gn('f-actual-hc'), actualMC = gn('f-actual-mc');
+  const wt = gn('f-wt'), ct = gn('f-ct'), bt = gn('f-bt'), it = gn('f-it');
+
+  // Target
+  const targetDay    = (sam > 0 && swt > 0) ? Math.round((swt * 60) / sam) : null;
+  const autoTargetH  = (sam > 0 && hc > 0)  ? +(60 / sam / hc).toFixed(2) : null;
+  sv('f-target-day',   targetDay   !== null ? targetDay + ' pcs' : '—');
+  sv('f-auto-target-h', autoTargetH !== null ? autoTargetH + ' pcs/h' : '—');
+
+  // EFF
+  const eff = (targetDay > 0 && actualHC > 0) ? +(actualHC / targetDay * 100).toFixed(1) : null;
+  sv('f-eff', eff !== null ? eff + '%' : '—');
+
+  // Time
+  const total = wt + ct + bt + it;
+  sv('f-total-time', total > 0 ? total + ' min' : '—');
+  const util = (total > 0 && wt > 0) ? +(wt / total * 100).toFixed(1) : null;
+  sv('f-util', util !== null ? util + '%' : '—');
+
+  // Defect
+  let totalDef = 0;
+  document.querySelectorAll('.d-qty').forEach(el => { totalDef += parseFloat(el.value) || 0; });
+  g('total-defect').textContent = totalDef + ' pcs';
+  const defRate = (actualMC > 0 && totalDef > 0) ? +(totalDef / actualMC * 100).toFixed(2) : null;
+  sv('f-defect-rate', defRate !== null ? defRate + '%' : '—');
+  document.querySelectorAll('#defect-rows tr').forEach(tr => {
+    const qty = parseFloat(tr.querySelector('.d-qty')?.value) || 0;
+    const pctEl = tr.querySelector('.d-pct');
+    if (pctEl) pctEl.value = actualMC > 0 ? (qty / actualMC * 100).toFixed(2) + '%' : '—';
+  });
+
+  // KPI cards
+  updateKPI('kv-target', 'kb-target', targetDay, null,  '#3B8BD4', '#3B8BD4', '#3B8BD4', null, ' pcs');
+  updateKPI('kv-eff',    'kb-eff',    eff,       100,   '#E24B4A', '#D97706', '#16A34A', [65,85]);
+  updateKPI('kv-util',   'kb-util',   util,      100,   '#E24B4A', '#D97706', '#16A34A', [70,90]);
+  updateKPI('kv-def',    'kb-def',    defRate,   10,    '#16A34A', '#D97706', '#E24B4A', [2,5]);
+}
+
+function updateKPI(valId, barId, val, max, c1, c2, c3, thresholds, suffix='%') {
+  const ve = g(valId), be = g(barId);
+  if (val === null || isNaN(val)) { ve.textContent = '—'; be.style.width = '0%'; return; }
+  ve.textContent = val + suffix;
+  be.style.width  = max ? Math.min(Math.abs(val) / max * 100, 100) + '%' : '100%';
+  if (!thresholds) { be.style.background = c1; return; }
+  be.style.background = val < thresholds[0] ? c1 : val < thresholds[1] ? c2 : c3;
+}
+
+// ── Defect rows ────────────────────────────────────────────────
+function makeDefectRow() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="manual d-name" type="text" placeholder="Tên lỗi..." oninput="recalc()" style="width:100%;height:30px;font-size:12px;"></td>
+    <td><input class="manual d-qty"  type="number" placeholder="0" oninput="recalc()" style="width:100%;height:30px;font-size:12px;"></td>
+    <td><input class="formula d-pct" type="text"   readonly placeholder="—"           style="width:100%;height:30px;font-size:12px;"></td>
+    <td><button class="rm-btn" onclick="removeDefectRow(this)">✕</button></td>
+  `;
+  return tr;
+}
+function addDefectRow() {
+  g('defect-rows').appendChild(makeDefectRow());
+}
+function removeDefectRow(btn) {
+  const rows = document.querySelectorAll('#defect-rows tr');
+  if (rows.length > 1) { btn.closest('tr').remove(); recalc(); }
+}
+
+// ── Build payload ──────────────────────────────────────────────
+function buildPayload() {
+  const defects = [];
+  document.querySelectorAll('#defect-rows tr').forEach(tr => {
+    const name = tr.querySelector('.d-name')?.value.trim();
+    const qty  = parseFloat(tr.querySelector('.d-qty')?.value) || 0;
+    if (name) defects.push({ name, qty });
+  });
+  return {
+    project:               g('f-project').value,
+    mo_color:              g('f-mo').value.trim(),
+    date:                  g('f-date').value,
+    machine_line:          g('f-machine').value.trim(),
+    sam:                   gn('f-sam'),
+    standard_working_time: gn('f-swt'),
+    hc_operators:          gn('f-hc'),
+    actual_output_day_hc:  gn('f-actual-hc'),
+    actual_output_day_mc:  gn('f-actual-mc'),
+    auto_output_h_hc:      gn('f-auto-h-hc'),
+    actual_output_h_mc:    gn('f-actual-h-mc'),
+    manual_output_day_hc:  gn('f-manual-day'),
+    manual_output_h_hc:    gn('f-manual-h'),
+    machine_working_time:  gn('f-wt'),
+    changeover_time:       gn('f-ct'),
+    breakdown_time:        gn('f-bt'),
+    idle_time:             gn('f-it'),
+    defects,
+  };
+}
+
+// ── Validate ───────────────────────────────────────────────────
+function validate(payload) {
+  if (!payload.project)   return 'Vui lòng chọn Tên Dự Án';
+  if (!payload.mo_color)  return 'Vui lòng nhập MO/Color';
+  if (!payload.date)      return 'Vui lòng chọn ngày';
+  if (!payload.sam)       return 'Vui lòng nhập SAM';
+  if (!payload.standard_working_time) return 'Vui lòng nhập Standard Working Time';
+  if (!payload.hc_operators)          return 'Vui lòng nhập HC vận hành máy';
+  return null;
+}
+
+// ── Submit ─────────────────────────────────────────────────────
+async function submitForm(exportExcel) {
+  const payload = buildPayload();
+  const err = validate(payload);
+  if (err) { showToast(err, 'err'); return; }
+
+  const btnId  = exportExcel ? 'btn-export' : 'btn-save';
+  const endpoint = exportExcel ? '/api/log/export' : '/api/log';
+  g(btnId).disabled = true;
+
+  showToast(exportExcel ? 'Đang tạo file Excel...' : 'Đang lưu...', 'loading');
+
+  try {
+    const res = await fetch(API_BASE + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `HTTP ${res.status}`);
+    }
+
+    if (exportExcel) {
+      // Download file
+      const blob     = await res.blob();
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      const filename = `MachineLog_${payload.project.replace(/\s+/g,'_')}_${payload.date}.xlsx`;
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      showToast('✓ File Excel đã tải xuống!', 'ok');
+    } else {
+      const data = await res.json();
+      showToast(`✓ Đã lưu (ID: ${data.id})  EFF: ${data.computed.eff_pct}%`, 'ok');
+    }
+  } catch(e) {
+    showToast('Lỗi: ' + e.message, 'err');
+  } finally {
+    g(btnId).disabled = false;
+  }
+}
+
+// ── Reset form ─────────────────────────────────────────────────
+function resetForm() {
+  const ids = ['f-mo','f-machine','f-sam','f-swt','f-hc',
+               'f-actual-hc','f-actual-mc','f-auto-h-hc','f-actual-h-mc',
+               'f-manual-day','f-manual-h','f-wt','f-ct','f-bt','f-it'];
+  ids.forEach(id => { if(g(id)) g(id).value = ''; });
+  g('f-project').selectedIndex = 0;
+  g('f-date').valueAsDate = new Date();
+  g('defect-rows').innerHTML = '';
+  addDefectRow(); addDefectRow();
+  recalc();
+  showToast('Form đã được xoá', 'ok');
+}
+
+// ── Toast ──────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type='ok') {
+  const t = g('toast');
+  clearTimeout(toastTimer);
+  t.textContent = msg;
+  t.className   = `toast ${type} show`;
+  if (type !== 'loading') {
+    toastTimer = setTimeout(() => { t.className = `toast ${type}`; }, 3500);
+  }
+}
+
+// ── History ────────────────────────────────────────────────────
+async function loadHistory() {
+  const proj   = g('hist-project-filter').value;
+  const tbody  = g('hist-body');
+  tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Đang tải...</td></tr>';
+  try {
+    const url = API_BASE + '/api/logs' + (proj ? `?project=${encodeURIComponent(proj)}` : '');
+    const res  = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Chưa có dữ liệu nào</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const effPill = effBadge(r.eff_pct);
+      const defPill = defBadge(r.defect_rate_pct);
+      return `<tr>
+        <td>${r.date}</td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${r.project}</td>
+        <td>${r.mo_color || '—'}</td>
+        <td>${r.target_output_day ?? '—'}</td>
+        <td>${r.actual_output_day_hc ?? '—'}</td>
+        <td>${effPill}</td>
+        <td><span class="pill ${utilClass(r.mc_utilization_pct)}">${r.mc_utilization_pct ?? '—'}%</span></td>
+        <td>${defPill}</td>
+        <td><button class="export-btn" onclick="reExport(${r.id})">⬇ xlsx</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state" style="color:var(--danger)">
+      Lỗi tải dữ liệu: ${e.message}</td></tr>`;
+  }
+}
+
+function effBadge(v) {
+  if (v === null || v === undefined) return '—';
+  const cls = v >= 85 ? 'pill-green' : v >= 65 ? 'pill-warn' : 'pill-red';
+  return `<span class="pill ${cls}">${v}%</span>`;
+}
+function defBadge(v) {
+  if (v === null || v === undefined) return '—';
+  const cls = v <= 2 ? 'pill-green' : v <= 5 ? 'pill-warn' : 'pill-red';
+  return `<span class="pill ${cls}">${v}%</span>`;
+}
+function utilClass(v) {
+  return v >= 90 ? 'pill-green' : v >= 70 ? 'pill-warn' : 'pill-red';
+}
+
+async function reExport(id) {
+  showToast('Đang tạo Excel...', 'loading');
+  try {
+    // Fetch record then re-export
+    const rRes  = await fetch(API_BASE + `/api/logs/${id}`);
+    if (!rRes.ok) throw new Error('Không tìm thấy record');
+    const record = await rRes.json();
+
+    // Re-post to export endpoint
+    const payload = {
+      project:               record.project,
+      mo_color:              record.mo_color,
+      date:                  record.date,
+      machine_line:          record.machine_line,
+      sam:                   record.sam,
+      standard_working_time: record.standard_working_time,
+      hc_operators:          record.hc_operators,
+      actual_output_day_hc:  record.actual_output_day_hc,
+      actual_output_day_mc:  record.actual_output_day_mc,
+      auto_output_h_hc:      record.auto_output_h_hc,
+      actual_output_h_mc:    record.actual_output_h_mc,
+      manual_output_day_hc:  record.manual_output_day_hc,
+      manual_output_h_hc:    record.manual_output_h_hc,
+      machine_working_time:  record.machine_working_time,
+      changeover_time:       record.changeover_time,
+      breakdown_time:        record.breakdown_time,
+      idle_time:             record.idle_time,
+      defects:               record.defects || [],
+    };
+    const eRes = await fetch(API_BASE + '/api/log/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!eRes.ok) throw new Error('Xuất thất bại');
+    const blob = await eRes.blob();
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = `MachineLog_${record.project.replace(/\s+/g,'_')}_${record.date}.xlsx`;
+    a.click();
+    showToast('✓ Đã tải xuống!', 'ok');
+  } catch(e) {
+    showToast('Lỗi: ' + e.message, 'err');
+  }
+}
+</script>
+</body>
+</html>

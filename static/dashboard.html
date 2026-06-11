@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Regent Machine Log</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ── Reset & tokens ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:     #1A2744;
+  --navy2:    #243560;
+  --orange:   #E8542A;
+  --green:    #16A34A;
+  --warn:     #D97706;
+  --danger:   #DC2626;
+  --blue:     #2563EB;
+  --purple:   #7C3AED;
+  --teal:     #0D9488;
+  --gray-bg:  #F0F2F5;
+  --gray-bd:  #DDE1E9;
+  --gray-txt: #6B7280;
+  --text:     #1A1F2E;
+  --text-2:   #4B5563;
+  --white:    #FFFFFF;
+  --card-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --radius: 10px;
+}
+html { font-size: 14px; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--gray-bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Nav ────────────────────────────────────────────────────── */
+.nav {
+  background: var(--navy); height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; }
+.nav-logo {
+  width: 30px; height: 30px; border-radius: 7px; background: var(--orange);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: #fff; font-weight: 700;
+}
+.nav-title { color: #fff; font-size: 13px; font-weight: 600; }
+.nav-sub   { color: rgba(255,255,255,.4); font-size: 10px; margin-top: 1px; }
+.nav-actions { display: flex; align-items: center; gap: 8px; }
+.nav-btn {
+  height: 30px; padding: 0 12px; border-radius: 6px; border: none;
+  font-size: 11px; font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.nav-btn-outline {
+  background: rgba(255,255,255,.1); color: #fff;
+  border: 1px solid rgba(255,255,255,.2);
+}
+.nav-btn-outline:hover { background: rgba(255,255,255,.18); }
+.nav-btn-primary { background: var(--orange); color: #fff; }
+.nav-btn-primary:hover { background: #cc4820; }
+
+/* ── Main layout ────────────────────────────────────────────── */
+.main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+
+/* ── Filter bar ─────────────────────────────────────────────── */
+.filter-bar {
+  background: var(--white); border: 1px solid var(--gray-bd);
+  border-radius: var(--radius); padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.filter-bar label { font-size: 11px; color: var(--gray-txt); font-weight: 500; }
+.filter-bar select, .filter-bar input[type=date] {
+  height: 32px; padding: 0 10px; border: 1px solid var(--gray-bd);
+  border-radius: 7px; font-size: 12px; background: var(--white); color: var(--text);
+}
+.filter-bar select:focus, .filter-bar input:focus { outline: none; border-color: var(--blue); }
+.filter-sep { flex: 1; }
+.btn-load {
+  height: 32px; padding: 0 16px; border-radius: 7px; border: none;
+  background: var(--navy); color: #fff; font-size: 12px;
+  font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;
+}
+.btn-load:hover { background: var(--navy2); }
+.btn-load:disabled { background: #9aa3b2; cursor: not-allowed; }
+
+/* ── Section title ──────────────────────────────────────────── */
+.sec-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--gray-txt);
+  margin: 20px 0 10px; display: flex; align-items: center; gap: 6px;
+}
+.sec-title::after {
+  content: ''; flex: 1; height: 1px; background: var(--gray-bd);
+}
+
+/* ── KPI grid ───────────────────────────────────────────────── */
+.kpi-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 6px; }
+.kpi-card {
+  background: var(--white); border: 1px solid var(--gray-bd);
+  border-radius: var(--radius); padding: 14px 16px;
+  box-shadow: var(--card-shadow);
+  position: relative; overflow: hidden;
+}
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 3px; background: var(--accent, var(--navy));
+}
+.kpi-label { font-size: 10px; color: var(--gray-txt); margin-bottom: 5px; }
+.kpi-value { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+.kpi-sub   { font-size: 10px; color: var(--gray-txt); margin-top: 4px; }
+.kpi-trend {
+  font-size: 10px; font-weight: 600; margin-top: 4px;
+  display: flex; align-items: center; gap: 3px;
+}
+.trend-up   { color: var(--green); }
+.trend-down { color: var(--danger); }
+.trend-flat { color: var(--gray-txt); }
+
+/* ── Chart grid ─────────────────────────────────────────────── */
+.chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.chart-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.chart-full   { margin-bottom: 12px; }
+
+.chart-card {
+  background: var(--white); border: 1px solid var(--gray-bd);
+  border-radius: var(--radius); padding: 16px;
+  box-shadow: var(--card-shadow);
+}
+.chart-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.chart-title { font-size: 12px; font-weight: 600; color: var(--text); }
+.chart-subtitle { font-size: 10px; color: var(--gray-txt); margin-top: 2px; }
+.chart-badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 99px; font-weight: 600;
+}
+.badge-green  { background: #dcfce7; color: #15803d; }
+.badge-yellow { background: #fef9c3; color: #854d0e; }
+.badge-red    { background: #fee2e2; color: #991b1b; }
+.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+.chart-wrap   { position: relative; }
+
+/* ── History table ──────────────────────────────────────────── */
+.table-card {
+  background: var(--white); border: 1px solid var(--gray-bd);
+  border-radius: var(--radius); overflow: hidden;
+  box-shadow: var(--card-shadow);
+}
+.table-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--gray-bd);
+  background: var(--gray-bg);
+}
+.table-toolbar-title { font-size: 12px; font-weight: 600; color: var(--text); }
+.table-toolbar-sub   { font-size: 10px; color: var(--gray-txt); }
+.tbl-wrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 800px; }
+.tbl th {
+  background: var(--navy); color: #fff; padding: 9px 12px;
+  text-align: left; font-size: 10px; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap;
+}
+.tbl td {
+  padding: 9px 12px; border-bottom: 1px solid var(--gray-bd);
+  white-space: nowrap; color: var(--text);
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: #f8f9fc; }
+.pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 99px;
+  font-size: 10px; font-weight: 700;
+}
+.pill-green  { background: #dcfce7; color: #15803d; }
+.pill-yellow { background: #fef9c3; color: #854d0e; }
+.pill-red    { background: #fee2e2; color: #991b1b; }
+.pill-blue   { background: #dbeafe; color: #1d4ed8; }
+.tbl-export-btn {
+  height: 24px; padding: 0 8px; font-size: 10px; font-weight: 600;
+  border: 1px solid var(--gray-bd); border-radius: 5px;
+  background: var(--white); color: var(--text-2); cursor: pointer;
+}
+.tbl-export-btn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+/* ── Empty / loading states ─────────────────────────────────── */
+.state-box {
+  padding: 48px 16px; text-align: center; color: var(--gray-txt); font-size: 13px;
+}
+.state-icon { font-size: 32px; margin-bottom: 8px; }
+
+/* ── Toast ──────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  padding: 11px 16px; border-radius: 8px; font-size: 12px; font-weight: 500;
+  color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.18);
+  transform: translateY(60px); opacity: 0; transition: all .25s;
+  display: flex; align-items: center; gap: 7px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.ok      { background: var(--green); }
+.toast.err     { background: var(--danger); }
+.toast.loading { background: var(--navy); }
+
+/* ── API banner ─────────────────────────────────────────────── */
+.api-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; margin-bottom: 14px;
+  background: var(--white); border: 1px solid var(--gray-bd);
+  border-radius: 8px; font-size: 11px;
+}
+.api-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.api-dot.ok  { background: var(--green); }
+.api-dot.err { background: var(--danger); }
+.api-dot.spin { background: var(--warn); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.api-url-input {
+  flex: 1; height: 26px; padding: 0 8px;
+  border: 1px solid var(--gray-bd); border-radius: 5px;
+  font-size: 11px; font-family: monospace; background: #f9fafb;
+}
+.api-url-input:focus { outline: none; border-color: var(--blue); }
+.btn-check {
+  height: 26px; padding: 0 10px; font-size: 11px; font-weight: 600;
+  background: var(--navy); color: #fff; border: none; border-radius: 5px; cursor: pointer;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media(max-width:900px) {
+  .kpi-grid      { grid-template-columns: repeat(3,1fr); }
+  .chart-grid-3  { grid-template-columns: 1fr 1fr; }
+}
+@media(max-width:640px) {
+  .kpi-grid      { grid-template-columns: 1fr 1fr; }
+  .chart-grid-2  { grid-template-columns: 1fr; }
+  .chart-grid-3  { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Nav ────────────────────────────────────────────────── -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo">R</div>
+    <div>
+      <div class="nav-title">Dashboard — Machine Performance</div>
+      <div class="nav-sub">Regent Garment Factory · Crystal International Group</div>
+    </div>
+  </div>
+  <div class="nav-actions">
+    <button class="nav-btn nav-btn-outline" onclick="location.href='/'">📋 Nhập liệu</button>
+    <button class="nav-btn nav-btn-primary" onclick="loadData()">🔄 Làm mới</button>
+  </div>
+</nav>
+
+<div class="main">
+
+  <!-- API status -->
+  <div class="api-banner">
+    <div class="api-dot spin" id="api-dot"></div>
+    <span id="api-txt" style="color:var(--gray-txt)">Đang kết nối...</span>
+    <input class="api-url-input" id="api-url" value="https://regent-machine-log.onrender.com">
+    <button class="btn-check" onclick="checkAndLoad()">Kết nối</button>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <label>Dự án</label>
+    <select id="fil-project">
+      <option value="">Tất cả dự án</option>
+      <option>AI Garment Inspection</option>
+      <option>Auto Bagging &amp; Sealing</option>
+      <option>AGV Outdoor Navigation</option>
+      <option>Auto Loading Heat Press</option>
+      <option>Label/Barcode Inspection</option>
+    </select>
+    <label>Từ ngày</label>
+    <input type="date" id="fil-from">
+    <label>Đến ngày</label>
+    <input type="date" id="fil-to">
+    <div class="filter-sep"></div>
+    <button class="btn-load" id="btn-load" onclick="loadData()">
+      📊 Xem báo cáo
+    </button>
+  </div>
+
+  <!-- ── KPI SUMMARY ── -->
+  <div class="sec-title">📈 Tổng quan</div>
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--accent:var(--navy)">
+      <div class="kpi-label">Tổng số records</div>
+      <div class="kpi-value" id="kpi-total">—</div>
+      <div class="kpi-sub" id="kpi-total-sub">ngày ghi nhận</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--blue)">
+      <div class="kpi-label">EFF trung bình</div>
+      <div class="kpi-value" id="kpi-eff-avg">—</div>
+      <div class="kpi-trend" id="kpi-eff-trend">—</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--teal)">
+      <div class="kpi-label">MC Utilization TB</div>
+      <div class="kpi-value" id="kpi-util-avg">—</div>
+      <div class="kpi-trend" id="kpi-util-trend">—</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--danger)">
+      <div class="kpi-label">Defect rate TB</div>
+      <div class="kpi-value" id="kpi-def-avg">—</div>
+      <div class="kpi-trend" id="kpi-def-trend">—</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--orange)">
+      <div class="kpi-label">Total defect (pcs)</div>
+      <div class="kpi-value" id="kpi-def-total">—</div>
+      <div class="kpi-sub">tổng lỗi tích lũy</div>
+    </div>
+  </div>
+
+  <!-- ── ROW 1: EFF + MC Utilization (line charts) ── -->
+  <div class="sec-title">📉 Xu hướng theo ngày</div>
+  <div class="chart-grid-2">
+    <div class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">EFF (%) theo ngày</div>
+          <div class="chart-subtitle">Actual HC ÷ Target output/day × 100</div>
+        </div>
+        <span class="chart-badge badge-blue" id="badge-eff">—</span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-eff" height="180"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">MC Utilization (%) theo ngày</div>
+          <div class="chart-subtitle">Machine working time ÷ Total time × 100</div>
+        </div>
+        <span class="chart-badge badge-blue" id="badge-util">—</span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-util" height="180"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── ROW 2: Defect rate + Output comparison ── -->
+  <div class="chart-grid-2">
+    <div class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">Defect rate (%) theo ngày</div>
+          <div class="chart-subtitle">Total defect ÷ Actual MC × 100</div>
+        </div>
+        <span class="chart-badge badge-red" id="badge-def">—</span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-def" height="180"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">Target vs Actual output/day</div>
+          <div class="chart-subtitle">So sánh sản lượng kế hoạch và thực tế</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-output" height="180"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── ROW 3: Time breakdown + Defect by type ── -->
+  <div class="chart-grid-2">
+    <div class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">Phân tích thời gian máy</div>
+          <div class="chart-subtitle">Working / Change-over / Breakdown / Idle (TB phút)</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-time" height="200"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">Top defect types</div>
+          <div class="chart-subtitle">Tổng số lỗi tích lũy theo loại</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-defect-types" height="200"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── EFF by project (bar) full width ── -->
+  <div class="chart-full">
+    <div class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">EFF (%) theo dự án</div>
+          <div class="chart-subtitle">So sánh hiệu suất trung bình giữa các dự án</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-proj-eff" height="120"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── History table ── -->
+  <div class="sec-title">📋 Chi tiết từng ngày</div>
+  <div class="table-card">
+    <div class="table-toolbar">
+      <div>
+        <div class="table-toolbar-title">Lịch sử nhập liệu</div>
+        <div class="table-toolbar-sub" id="tbl-count">—</div>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Ngày</th>
+            <th>Dự án</th>
+            <th>MO/Color</th>
+            <th>Máy</th>
+            <th>Target/day</th>
+            <th>Actual HC</th>
+            <th>Actual MC</th>
+            <th>EFF%</th>
+            <th>MC Util%</th>
+            <th>Defect</th>
+            <th>Defect%</th>
+            <th>Excel</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body">
+          <tr><td colspan="12"><div class="state-box">
+            <div class="state-icon">📊</div>
+            Nhấn "Xem báo cáo" để tải dữ liệu
+          </div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- end main -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────
+let API_BASE = localStorage.getItem('api_base') || 'https://regent-machine-log.onrender.com';
+let CHARTS   = {};     // store chart instances
+let ALL_DATA = [];     // raw records
+
+// ── Init ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('api-url').value = API_BASE;
+  // Default date range: last 30 days
+  const to   = new Date();
+  const from = new Date(); from.setDate(from.getDate() - 30);
+  document.getElementById('fil-to').value   = fmtDate(to);
+  document.getElementById('fil-from').value = fmtDate(from);
+  checkAndLoad();
+});
+
+function fmtDate(d) {
+  return d.toISOString().split('T')[0];
+}
+
+// ── API check + load ───────────────────────────────────────────
+async function checkAndLoad() {
+  const url = document.getElementById('api-url').value.trim().replace(/\/$/, '');
+  API_BASE   = url;
+  localStorage.setItem('api_base', url);
+  const dot  = document.getElementById('api-dot');
+  const txt  = document.getElementById('api-txt');
+  dot.className = 'api-dot spin';
+  txt.textContent = 'Đang kết nối...';
+  txt.style.color = 'var(--gray-txt)';
+  try {
+    const res = await fetch(API_BASE + '/health', { signal: AbortSignal.timeout(4000) });
+    await res.json();
+    dot.className = 'api-dot ok';
+    txt.textContent = '✓ Kết nối thành công — ' + API_BASE;
+    txt.style.color = 'var(--green)';
+    await loadData();
+  } catch(e) {
+    dot.className = 'api-dot err';
+    txt.textContent = '✗ Không kết nối được — kiểm tra server';
+    txt.style.color = 'var(--danger)';
+  }
+}
+
+// ── Load + filter data ─────────────────────────────────────────
+async function loadData() {
+  const btn = document.getElementById('btn-load');
+  btn.disabled = true; btn.textContent = '⏳ Đang tải...';
+  try {
+    const proj = document.getElementById('fil-project').value;
+    const url  = API_BASE + '/api/logs' + (proj ? `?project=${encodeURIComponent(proj)}` : '');
+    const res  = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    ALL_DATA = await res.json();
+    // Client-side date filter
+    const from = document.getElementById('fil-from').value;
+    const to   = document.getElementById('fil-to').value;
+    const filtered = ALL_DATA.filter(r => {
+      if (from && r.date < from) return false;
+      if (to   && r.date > to)   return false;
+      return true;
+    });
+    renderAll(filtered);
+    showToast(`✓ Tải ${filtered.length} records`, 'ok');
+  } catch(e) {
+    showToast('Lỗi: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = '📊 Xem báo cáo';
+  }
+}
+
+// ── Render everything ──────────────────────────────────────────
+function renderAll(data) {
+  if (!data.length) {
+    renderEmpty();
+    return;
+  }
+  // Sort by date asc for charts
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  renderKPIs(sorted);
+  renderEffChart(sorted);
+  renderUtilChart(sorted);
+  renderDefectRateChart(sorted);
+  renderOutputChart(sorted);
+  renderTimeChart(sorted);
+  renderDefectTypesChart(sorted);
+  renderProjEffChart(sorted);
+  renderTable([...data].sort((a, b) => b.date.localeCompare(a.date)));
+}
+
+function renderEmpty() {
+  ['kpi-total','kpi-eff-avg','kpi-util-avg','kpi-def-avg','kpi-def-total'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('tbl-body').innerHTML =
+    `<tr><td colspan="12"><div class="state-box">
+      <div class="state-icon">📭</div>Không có dữ liệu trong khoảng thời gian này</div></td></tr>`;
+}
+
+// ── KPI summary ────────────────────────────────────────────────
+function renderKPIs(data) {
+  const avg = (arr, key) => {
+    const vals = arr.map(r => r[key]).filter(v => v != null && !isNaN(v));
+    return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : null;
+  };
+  const effAvg  = avg(data, 'eff_pct');
+  const utilAvg = avg(data, 'mc_utilization_pct');
+  const defAvg  = avg(data, 'defect_rate_pct');
+  const defTot  = data.reduce((s,r) => s + (r.total_defect||0), 0);
+
+  document.getElementById('kpi-total').textContent = data.length;
+  document.getElementById('kpi-total-sub').textContent =
+    data.length > 0 ? `${data[0].date} → ${data[data.length-1].date}` : '';
+
+  setKPI('kpi-eff-avg',  'kpi-eff-trend',  effAvg,  '%', [65,85], false);
+  setKPI('kpi-util-avg', 'kpi-util-trend', utilAvg, '%', [70,90], false);
+  setKPI('kpi-def-avg',  'kpi-def-trend',  defAvg,  '%', [2,5],   true);
+  document.getElementById('kpi-def-total').textContent = defTot.toLocaleString();
+
+  // Update chart badges
+  document.getElementById('badge-eff').textContent  = effAvg  !== null ? `TB ${effAvg}%`  : '—';
+  document.getElementById('badge-util').textContent = utilAvg !== null ? `TB ${utilAvg}%` : '—';
+  document.getElementById('badge-def').textContent  = defAvg  !== null ? `TB ${defAvg}%`  : '—';
+  document.getElementById('badge-eff').className  = 'chart-badge ' + effBadgeClass(effAvg);
+  document.getElementById('badge-util').className = 'chart-badge ' + effBadgeClass(utilAvg);
+  document.getElementById('badge-def').className  = 'chart-badge ' + defBadgeClass(defAvg);
+}
+
+function setKPI(valId, trendId, val, suffix, thresholds, invertColors) {
+  const el = document.getElementById(valId);
+  const tr = document.getElementById(trendId);
+  if (val === null) { el.textContent = '—'; tr.textContent = '—'; return; }
+  el.textContent = val + suffix;
+  const good = invertColors ? val <= thresholds[0] : val >= thresholds[1];
+  const bad  = invertColors ? val >  thresholds[1] : val <  thresholds[0];
+  tr.className   = 'kpi-trend ' + (good ? 'trend-up' : bad ? 'trend-down' : 'trend-flat');
+  tr.textContent = good ? '▲ Tốt' : bad ? '▼ Cần cải thiện' : '→ Trung bình';
+}
+
+function effBadgeClass(v) {
+  if (v === null) return 'badge-blue';
+  return v >= 85 ? 'badge-green' : v >= 65 ? 'badge-yellow' : 'badge-red';
+}
+function defBadgeClass(v) {
+  if (v === null) return 'badge-blue';
+  return v <= 2 ? 'badge-green' : v <= 5 ? 'badge-yellow' : 'badge-red';
+}
+
+// ── Chart factory ──────────────────────────────────────────────
+const NAVY   = '#1A2744';
+const ORANGE = '#E8542A';
+const BLUE   = '#2563EB';
+const GREEN  = '#16A34A';
+const DANGER = '#DC2626';
+const TEAL   = '#0D9488';
+const PURPLE = '#7C3AED';
+const AMBER  = '#D97706';
+
+const CHART_DEFAULTS = {
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { color: '#F0F2F5' }, ticks: { font: { size: 10 }, color: '#6B7280' } },
+    y: { grid: { color: '#F0F2F5' }, ticks: { font: { size: 10 }, color: '#6B7280' } },
+  },
+  animation: { duration: 400 },
+};
+
+function makeChart(id, config) {
+  if (CHARTS[id]) { CHARTS[id].destroy(); }
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  CHARTS[id] = new Chart(ctx, config);
+}
+
+function lineConfig(labels, datasets, yMin=0, yMax=100, thresholdLine=null) {
+  const annotations = {};
+  if (thresholdLine) {
+    annotations.line1 = {
+      type: 'line', yMin: thresholdLine, yMax: thresholdLine,
+      borderColor: 'rgba(220,38,38,.3)', borderWidth: 1, borderDash: [4,4],
+    };
+  }
+  return {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      ...CHART_DEFAULTS,
+      scales: {
+        x: { ...CHART_DEFAULTS.scales.x },
+        y: { ...CHART_DEFAULTS.scales.y, min: yMin, suggestedMax: yMax },
+      },
+      plugins: {
+        legend: { display: datasets.length > 1, position: 'bottom',
+          labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } },
+      },
+    },
+  };
+}
+
+function makeDataset(label, data, color, fill=false) {
+  return {
+    label, data,
+    borderColor: color,
+    backgroundColor: fill ? color + '22' : color + '00',
+    borderWidth: 2,
+    pointRadius: data.length <= 20 ? 4 : 2,
+    pointBackgroundColor: color,
+    fill,
+    tension: 0.3,
+  };
+}
+
+// ── EFF chart ─────────────────────────────────────────────────
+function renderEffChart(data) {
+  const labels  = data.map(r => shortDate(r.date));
+  const effVals = data.map(r => r.eff_pct ?? null);
+  makeChart('chart-eff', lineConfig(labels,
+    [makeDataset('EFF (%)', effVals, BLUE, true)], 0, 120, 85));
+}
+
+// ── MC Utilization chart ───────────────────────────────────────
+function renderUtilChart(data) {
+  const labels   = data.map(r => shortDate(r.date));
+  const utilVals = data.map(r => r.mc_utilization_pct ?? null);
+  makeChart('chart-util', lineConfig(labels,
+    [makeDataset('MC Util (%)', utilVals, TEAL, true)], 0, 110, 90));
+}
+
+// ── Defect rate chart ──────────────────────────────────────────
+function renderDefectRateChart(data) {
+  const labels  = data.map(r => shortDate(r.date));
+  const defVals = data.map(r => r.defect_rate_pct ?? null);
+  const cfg = lineConfig(labels,
+    [makeDataset('Defect rate (%)', defVals, DANGER, true)], 0, null);
+  // Override y-axis to not force 100 max
+  cfg.options.scales.y = {
+    ...CHART_DEFAULTS.scales.y, min: 0,
+    suggestedMax: Math.max(...defVals.filter(Boolean)) * 1.3 || 10,
+  };
+  makeChart('chart-def', cfg);
+}
+
+// ── Target vs Actual output ────────────────────────────────────
+function renderOutputChart(data) {
+  const labels  = data.map(r => shortDate(r.date));
+  const targets = data.map(r => r.target_output_day ?? null);
+  const actuals = data.map(r => r.actual_output_day_hc ?? null);
+  makeChart('chart-output', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Target/day', data: targets, backgroundColor: NAVY + 'CC', borderRadius: 3, barPercentage: 0.6 },
+        { label: 'Actual HC',  data: actuals, backgroundColor: ORANGE + 'CC', borderRadius: 3, barPercentage: 0.6 },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: { legend: { display: true, position: 'bottom',
+        labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } },
+      scales: {
+        x: CHART_DEFAULTS.scales.x,
+        y: { ...CHART_DEFAULTS.scales.y, min: 0 },
+      },
+    },
+  });
+}
+
+// ── Time breakdown (stacked bar) ───────────────────────────────
+function renderTimeChart(data) {
+  const labels = data.map(r => shortDate(r.date));
+  makeChart('chart-time', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Working', data: data.map(r=>r.machine_working_time||0),
+          backgroundColor: GREEN+'CC', borderRadius: 2 },
+        { label: 'Change-over', data: data.map(r=>r.changeover_time||0),
+          backgroundColor: AMBER+'CC', borderRadius: 2 },
+        { label: 'Breakdown', data: data.map(r=>r.breakdown_time||0),
+          backgroundColor: DANGER+'CC', borderRadius: 2 },
+        { label: 'Idle', data: data.map(r=>r.idle_time||0),
+          backgroundColor: '#9CA3AF', borderRadius: 2 },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: { legend: { display: true, position: 'bottom',
+        labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } },
+      scales: {
+        x: { ...CHART_DEFAULTS.scales.x, stacked: true },
+        y: { ...CHART_DEFAULTS.scales.y, stacked: true,
+          ticks: { ...CHART_DEFAULTS.scales.y.ticks,
+            callback: v => v + ' min' } },
+      },
+    },
+  });
+}
+
+// ── Defect types (doughnut) ────────────────────────────────────
+function renderDefectTypesChart(data) {
+  // Aggregate defects across all records
+  const map = {};
+  data.forEach(r => {
+    (r.defects || []).forEach(d => {
+      if (!d.name) return;
+      map[d.name] = (map[d.name] || 0) + (d.qty || 0);
+    });
+  });
+  const entries = Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0, 8);
+  if (!entries.length) {
+    makeChart('chart-defect-types', {
+      type: 'doughnut', data: { labels: ['Không có dữ liệu'], datasets: [{ data: [1], backgroundColor: ['#E5E7EB'] }] },
+      options: { plugins: { legend: { display: false } }, animation: { duration: 0 } },
+    });
+    return;
+  }
+  const PALETTE = [DANGER, ORANGE, AMBER, PURPLE, BLUE, TEAL, GREEN, NAVY];
+  makeChart('chart-defect-types', {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(e => e[0]),
+      datasets: [{ data: entries.map(e => e[1]),
+        backgroundColor: PALETTE.slice(0, entries.length),
+        borderWidth: 2, borderColor: '#fff',
+      }],
+    },
+    options: {
+      cutout: '60%',
+      plugins: {
+        legend: { display: true, position: 'right',
+          labels: { font: { size: 10 }, boxWidth: 10, padding: 6 } },
+      },
+      animation: { duration: 400 },
+    },
+  });
+}
+
+// ── EFF by project (horizontal bar) ───────────────────────────
+function renderProjEffChart(data) {
+  const projMap = {};
+  data.forEach(r => {
+    if (!projMap[r.project]) projMap[r.project] = [];
+    if (r.eff_pct != null) projMap[r.project].push(r.eff_pct);
+  });
+  const projs = Object.keys(projMap);
+  const avgs  = projs.map(p => {
+    const vals = projMap[p];
+    return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : 0;
+  });
+  const colors = avgs.map(v => v >= 85 ? GREEN+'CC' : v >= 65 ? AMBER+'CC' : DANGER+'CC');
+  makeChart('chart-proj-eff', {
+    type: 'bar',
+    data: {
+      labels: projs,
+      datasets: [{
+        label: 'EFF trung bình (%)',
+        data: avgs,
+        backgroundColor: colors,
+        borderRadius: 5,
+        barPercentage: 0.5,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x}%` } } },
+      scales: {
+        x: { ...CHART_DEFAULTS.scales.x, min: 0, max: 120,
+          ticks: { ...CHART_DEFAULTS.scales.x.ticks, callback: v => v + '%' } },
+        y: CHART_DEFAULTS.scales.y,
+      },
+      animation: { duration: 400 },
+    },
+  });
+}
+
+// ── History table ──────────────────────────────────────────────
+function renderTable(data) {
+  document.getElementById('tbl-count').textContent = `${data.length} records`;
+  if (!data.length) {
+    document.getElementById('tbl-body').innerHTML =
+      `<tr><td colspan="12"><div class="state-box"><div class="state-icon">📭</div>Không có dữ liệu</div></td></tr>`;
+    return;
+  }
+  document.getElementById('tbl-body').innerHTML = data.map(r => `
+    <tr>
+      <td>${r.date}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${r.project}">${r.project}</td>
+      <td>${r.mo_color || '—'}</td>
+      <td>${r.machine_line || '—'}</td>
+      <td>${r.target_output_day ?? '—'}</td>
+      <td>${r.actual_output_day_hc ?? '—'}</td>
+      <td>${r.actual_output_day_mc ?? '—'}</td>
+      <td>${effPill(r.eff_pct)}</td>
+      <td>${utilPill(r.mc_utilization_pct)}</td>
+      <td>${r.total_defect ?? 0}</td>
+      <td>${defPill(r.defect_rate_pct)}</td>
+      <td><button class="tbl-export-btn" onclick="reExport(${r.id})">⬇ xlsx</button></td>
+    </tr>
+  `).join('');
+}
+
+function effPill(v) {
+  if (v == null) return '—';
+  const c = v >= 85 ? 'pill-green' : v >= 65 ? 'pill-yellow' : 'pill-red';
+  return `<span class="pill ${c}">${v}%</span>`;
+}
+function utilPill(v) {
+  if (v == null) return '—';
+  const c = v >= 90 ? 'pill-green' : v >= 70 ? 'pill-yellow' : 'pill-red';
+  return `<span class="pill ${c}">${v}%</span>`;
+}
+function defPill(v) {
+  if (v == null) return '—';
+  const c = v <= 2 ? 'pill-green' : v <= 5 ? 'pill-yellow' : 'pill-red';
+  return `<span class="pill ${c}">${v}%</span>`;
+}
+
+// ── Re-export from history ─────────────────────────────────────
+async function reExport(id) {
+  showToast('Đang tạo Excel...', 'loading');
+  try {
+    const rRes = await fetch(API_BASE + `/api/logs/${id}`);
+    if (!rRes.ok) throw new Error('Không tìm thấy record');
+    const record = await rRes.json();
+    const payload = {
+      project: record.project, mo_color: record.mo_color, date: record.date,
+      machine_line: record.machine_line, sam: record.sam,
+      standard_working_time: record.standard_working_time,
+      hc_operators: record.hc_operators,
+      actual_output_day_hc: record.actual_output_day_hc,
+      actual_output_day_mc: record.actual_output_day_mc,
+      auto_output_h_hc: record.auto_output_h_hc,
+      actual_output_h_mc: record.actual_output_h_mc,
+      manual_output_day_hc: record.manual_output_day_hc,
+      manual_output_h_hc: record.manual_output_h_hc,
+      machine_working_time: record.machine_working_time,
+      changeover_time: record.changeover_time,
+      breakdown_time: record.breakdown_time,
+      idle_time: record.idle_time,
+      defects: record.defects || [],
+    };
+    const eRes = await fetch(API_BASE + '/api/log/export', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!eRes.ok) throw new Error('Xuất thất bại');
+    const blob = await eRes.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `MachineLog_${record.project.replace(/\s+/g,'_')}_${record.date}.xlsx`;
+    a.click();
+    showToast('✓ Đã tải xuống!', 'ok');
+  } catch(e) {
+    showToast('Lỗi: ' + e.message, 'err');
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function shortDate(d) {
+  // "2025-06-10" → "10/6"
+  const parts = d.split('-');
+  return parts[2] + '/' + parseInt(parts[1]);
+}
+
+let toastTimer;
+function showToast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  clearTimeout(toastTimer);
+  t.textContent = msg;
+  t.className   = `toast ${type} show`;
+  if (type !== 'loading') {
+    toastTimer = setTimeout(() => { t.className = `toast ${type}`; }, 3000);
+  }
+}
+</script>
+</body>
+</html>
