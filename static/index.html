@@ -323,6 +323,7 @@ input.formula {
   .kpi-grid { grid-template-columns: 1fr 1fr; }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -338,7 +339,8 @@ input.formula {
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('form')">📋 <span>Nhập liệu</span></button>
-    <button class="nav-tab" onclick="showPage('history')">📊 <span>Lịch sử</span></button>
+    <button class="nav-tab" onclick="showPage('history')">🗂 <span>Lịch sử</span></button>
+    <button class="nav-tab" onclick="showPage('dashboard')">📈 <span>Dashboard</span></button>
   </div>
 </nav>
 
@@ -402,14 +404,35 @@ input.formula {
       <div class="fg3">
         <div class="f">
           <div class="f-label">Tên Dự Án <span class="badge badge-m">Nhập tay</span></div>
-          <select class="manual" id="f-project">
-            <option value="">-- Chọn dự án --</option>
-            <option>AI Garment Inspection</option>
-            <option>Auto Bagging &amp; Sealing</option>
-            <option>AGV Outdoor Navigation</option>
-            <option>Auto Loading Heat Press</option>
-            <option>Label/Barcode Inspection</option>
-          </select>
+          <div style="display:flex;gap:5px;align-items:flex-start;flex-direction:column;">
+            <div style="display:flex;gap:5px;width:100%;">
+              <select class="manual" id="f-project" style="flex:1;" onchange="saveLastValues()">
+                <option value="">-- Chọn dự án --</option>
+                <option>AI Garment Inspection</option>
+                <option>Auto Bagging &amp; Sealing</option>
+                <option>AGV Outdoor Navigation</option>
+                <option>Auto Loading Heat Press</option>
+                <option>Label/Barcode Inspection</option>
+              </select>
+              <button onclick="showAddProject()" title="Thêm dự án mới"
+                style="height:34px;min-width:34px;border-radius:6px;border:1.5px solid var(--yellow-bd);
+                       background:var(--yellow-bg);color:#8a5e00;font-size:20px;line-height:1;
+                       cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+            </div>
+            <div id="add-project-row" style="display:none;width:100%;">
+              <div style="display:flex;gap:5px;">
+                <input class="manual" type="text" id="f-project-new"
+                  placeholder="Nhập tên dự án mới..." style="flex:1;height:32px;"
+                  onkeydown="if(event.key==='Enter')confirmAddProject()">
+                <button onclick="confirmAddProject()"
+                  style="height:32px;padding:0 10px;border-radius:6px;border:none;
+                         background:#1A2744;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">✓ Thêm</button>
+                <button onclick="hideAddProject()"
+                  style="height:32px;padding:0 8px;border-radius:6px;
+                         border:1px solid var(--gray-bd);background:none;font-size:12px;cursor:pointer;">✕</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="f">
           <div class="f-label">MO / Color <span class="badge badge-m">Nhập tay</span></div>
@@ -646,6 +669,91 @@ input.formula {
 </div>
 </div><!-- end page-history -->
 
+<!-- ════════════════════════════════════════════════════════════
+     PAGE: DASHBOARD (embedded)
+════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-dashboard">
+<div class="main">
+
+  <!-- Filter bar -->
+  <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;
+              padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <label style="font-size:11px;color:var(--gray-txt);font-weight:500;">Dự án</label>
+    <select id="db-project" style="height:32px;padding:0 10px;border:1px solid var(--gray-bd);
+            border-radius:7px;font-size:12px;background:var(--white);">
+      <option value="">Tất cả dự án</option>
+      <option>AI Garment Inspection</option>
+      <option>Auto Bagging &amp; Sealing</option>
+      <option>AGV Outdoor Navigation</option>
+      <option>Auto Loading Heat Press</option>
+      <option>Label/Barcode Inspection</option>
+    </select>
+    <label style="font-size:11px;color:var(--gray-txt);font-weight:500;">Từ ngày</label>
+    <input type="date" id="db-from" style="height:32px;padding:0 10px;border:1px solid var(--gray-bd);border-radius:7px;font-size:12px;">
+    <label style="font-size:11px;color:var(--gray-txt);font-weight:500;">Đến ngày</label>
+    <input type="date" id="db-to"   style="height:32px;padding:0 10px;border:1px solid var(--gray-bd);border-radius:7px;font-size:12px;">
+    <div style="flex:1;"></div>
+    <button id="db-btn-load" onclick="loadDashboard()"
+      style="height:32px;padding:0 16px;border-radius:7px;border:none;background:var(--navy);
+             color:#fff;font-size:12px;font-weight:600;cursor:pointer;">📊 Xem báo cáo</button>
+  </div>
+
+  <!-- KPI row -->
+  <div id="db-kpi-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;"></div>
+
+  <!-- Charts row 1 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;">EFF (%) theo ngày</div>
+      <div style="font-size:10px;color:var(--gray-txt);margin-bottom:12px;">Actual HC ÷ Target/day × 100</div>
+      <canvas id="db-chart-eff" height="160"></canvas>
+    </div>
+    <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;">MC Utilization (%) theo ngày</div>
+      <div style="font-size:10px;color:var(--gray-txt);margin-bottom:12px;">Machine working time ÷ Total time × 100</div>
+      <canvas id="db-chart-util" height="160"></canvas>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;">Defect rate (%) theo ngày</div>
+      <div style="font-size:10px;color:var(--gray-txt);margin-bottom:12px;">Total defect ÷ Actual MC × 100</div>
+      <canvas id="db-chart-def" height="160"></canvas>
+    </div>
+    <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;">Target vs Actual output/day</div>
+      <div style="font-size:10px;color:var(--gray-txt);margin-bottom:12px;">So sánh sản lượng kế hoạch và thực tế</div>
+      <canvas id="db-chart-output" height="160"></canvas>
+    </div>
+  </div>
+
+  <!-- Charts row 3 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;">Phân tích thời gian máy (phút TB)</div>
+      <div style="font-size:10px;color:var(--gray-txt);margin-bottom:12px;">Working / Change-over / Breakdown / Idle</div>
+      <canvas id="db-chart-time" height="180"></canvas>
+    </div>
+    <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;">Top defect types</div>
+      <div style="font-size:10px;color:var(--gray-txt);margin-bottom:12px;">Tổng số lỗi tích lũy theo loại</div>
+      <canvas id="db-chart-deftype" height="180"></canvas>
+    </div>
+  </div>
+
+  <!-- EFF by project -->
+  <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;
+              box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:16px;">
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px;">EFF trung bình theo dự án</div>
+    <div style="font-size:10px;color:var(--gray-txt);margin-bottom:12px;">So sánh hiệu suất giữa các dự án</div>
+    <canvas id="db-chart-proj" height="100"></canvas>
+  </div>
+
+</div>
+</div><!-- end page-dashboard -->
+
 </div><!-- end app -->
 
 <!-- ── Toast ── -->
@@ -659,13 +767,98 @@ input.formula {
 let API_BASE = localStorage.getItem('api_base') || 'https://regent-machine-log.onrender.com';
 
 // ── Init ───────────────────────────────────────────────────────
+// ── localStorage keys ──────────────────────────────────────────
+const SAVE_FIELDS = [
+  'f-project','f-mo','f-machine','f-sam','f-swt','f-hc',
+  'f-actual-hc','f-actual-mc','f-auto-h-hc','f-actual-h-mc',
+  'f-manual-day','f-manual-h','f-wt','f-ct','f-bt','f-it'
+];
+const STORAGE_KEY = 'regent_last_values';
+const PROJECTS_KEY = 'regent_projects';
+
+function saveLastValues() {
+  const data = {};
+  SAVE_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) data[id] = el.tagName === 'SELECT' ? el.value : el.value;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function restoreLastValues() {
+  // Khôi phục dự án tự thêm trước
+  restoreCustomProjects();
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    SAVE_FIELDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && data[id] !== undefined && data[id] !== '') {
+        el.value = data[id];
+      }
+    });
+  } catch(e) {}
+}
+
+function restoreCustomProjects() {
+  try {
+    const projs = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]');
+    const sel = document.getElementById('f-project');
+    projs.forEach(name => {
+      if (![...sel.options].some(o => o.value === name)) {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = name;
+        sel.appendChild(opt);
+      }
+    });
+  } catch(e) {}
+}
+
+// ── Add new project ─────────────────────────────────────────────
+function showAddProject() {
+  document.getElementById('add-project-row').style.display = 'block';
+  document.getElementById('f-project-new').focus();
+}
+function hideAddProject() {
+  document.getElementById('add-project-row').style.display = 'none';
+  document.getElementById('f-project-new').value = '';
+}
+function confirmAddProject() {
+  const name = document.getElementById('f-project-new').value.trim();
+  if (!name) { showToast('Vui lòng nhập tên dự án', 'err'); return; }
+  const sel = document.getElementById('f-project');
+  if ([...sel.options].some(o => o.value === name)) {
+    showToast('Dự án này đã tồn tại', 'err'); return;
+  }
+  // Thêm vào select
+  const opt = document.createElement('option');
+  opt.value = opt.textContent = name;
+  sel.appendChild(opt);
+  sel.value = name;
+  // Lưu vào localStorage
+  try {
+    const projs = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]');
+    projs.push(name);
+    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projs));
+  } catch(e) {}
+  hideAddProject();
+  saveLastValues();
+  showToast('✓ Đã thêm dự án: ' + name, 'ok');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('api-url').value = API_BASE;
   document.getElementById('f-date').valueAsDate = new Date();
   addDefectRow();
   addDefectRow();
+  restoreLastValues();   // ← khôi phục giá trị lần trước
   recalc();
   checkAPI();
+  // Auto-save khi thay đổi bất kỳ trường nào
+  SAVE_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', saveLastValues);
+    if (el) el.addEventListener('input',  saveLastValues);
+  });
 });
 
 // ── Page navigation ────────────────────────────────────────────
@@ -674,7 +867,8 @@ function showPage(name) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   event.currentTarget.classList.add('active');
-  if (name === 'history') loadHistory();
+  if (name === 'history')   loadHistory();
+  if (name === 'dashboard') loadDashboard();
 }
 
 // ── API health check ───────────────────────────────────────────
@@ -805,12 +999,10 @@ function buildPayload() {
 
 // ── Validate ───────────────────────────────────────────────────
 function validate(payload) {
-  if (!payload.project)   return 'Vui lòng chọn Tên Dự Án';
-  if (!payload.mo_color)  return 'Vui lòng nhập MO/Color';
-  if (!payload.date)      return 'Vui lòng chọn ngày';
-  if (!payload.sam)       return 'Vui lòng nhập SAM';
-  if (!payload.standard_working_time) return 'Vui lòng nhập Standard Working Time';
-  if (!payload.hc_operators)          return 'Vui lòng nhập HC vận hành máy';
+  // Chỉ bắt buộc 2 trường tối thiểu để lưu
+  if (!payload.project) return 'Vui lòng chọn Tên Dự Án';
+  if (!payload.date)    return 'Vui lòng chọn ngày';
+  // Các trường còn lại có thể bỏ qua — lưu với giá trị 0
   return null;
 }
 
@@ -868,8 +1060,9 @@ function resetForm() {
   g('f-date').valueAsDate = new Date();
   g('defect-rows').innerHTML = '';
   addDefectRow(); addDefectRow();
+  localStorage.removeItem(STORAGE_KEY);  // xoá giá trị đã lưu
   recalc();
-  showToast('Form đã được xoá', 'ok');
+  showToast('Form đã được xoá — sẵn sàng nhập mới', 'ok');
 }
 
 // ── Toast ──────────────────────────────────────────────────────
@@ -978,6 +1171,197 @@ async function reExport(id) {
     showToast('Lỗi: ' + e.message, 'err');
   }
 }
+
+// ════════════════════════════════════════════════════════════════
+// DASHBOARD JS
+// ════════════════════════════════════════════════════════════════
+let DB_CHARTS = {};
+
+function loadDashboard() {
+  const proj = document.getElementById('db-project')?.value || '';
+  const from = document.getElementById('db-from')?.value || '';
+  const to   = document.getElementById('db-to')?.value   || '';
+  const btn  = document.getElementById('db-btn-load');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tải...'; }
+
+  const url = API_BASE + '/api/logs' + (proj ? '?project=' + encodeURIComponent(proj) : '');
+  fetch(url, { signal: AbortSignal.timeout(8000) })
+    .then(r => r.json())
+    .then(all => {
+      const data = all.filter(r => {
+        if (from && r.date < from) return false;
+        if (to   && r.date > to)   return false;
+        return true;
+      }).sort((a,b) => a.date.localeCompare(b.date));
+      if (!data.length) { showToast('Không có dữ liệu trong khoảng này', 'err'); return; }
+      renderDBKPIs(data);
+      renderDBCharts(data);
+      showToast('✓ Dashboard: ' + data.length + ' records', 'ok');
+    })
+    .catch(e => showToast('Lỗi: ' + e.message, 'err'))
+    .finally(() => { if(btn){ btn.disabled=false; btn.textContent='📊 Xem báo cáo'; } });
+}
+
+function dbAvg(data, key) {
+  const v = data.map(r=>r[key]).filter(x=>x!=null&&!isNaN(x));
+  return v.length ? +(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1) : null;
+}
+function dbShortDate(d) {
+  const p = d.split('-'); return p[2]+'/'+parseInt(p[1]);
+}
+
+function renderDBKPIs(data) {
+  const effAvg  = dbAvg(data,'eff_pct');
+  const utilAvg = dbAvg(data,'mc_utilization_pct');
+  const defAvg  = dbAvg(data,'defect_rate_pct');
+  const defTot  = data.reduce((s,r)=>s+(r.total_defect||0),0);
+  const kpis = [
+    { label:'Records',          val: data.length,                        suffix:'',  accent:'#1A2744' },
+    { label:'EFF TB (%)',       val: effAvg,                             suffix:'%', accent:'#2563EB',
+      cls: effAvg>=85?'#16A34A':effAvg>=65?'#D97706':'#DC2626' },
+    { label:'MC Utilization TB',val: utilAvg,                            suffix:'%', accent:'#0D9488',
+      cls: utilAvg>=90?'#16A34A':utilAvg>=70?'#D97706':'#DC2626' },
+    { label:'Defect rate TB',   val: defAvg,                             suffix:'%', accent:'#DC2626',
+      cls: defAvg<=2?'#16A34A':defAvg<=5?'#D97706':'#DC2626' },
+    { label:'Total defect',     val: defTot.toLocaleString(),            suffix:'',  accent:'#E8542A' },
+  ];
+  const row = document.getElementById('db-kpi-row');
+  if (!row) return;
+  row.innerHTML = kpis.map(k => `
+    <div style="background:#fff;border:1px solid #DDE1E9;border-radius:10px;padding:14px 16px;
+                box-shadow:0 1px 3px rgba(0,0,0,.07);border-top:3px solid ${k.accent};">
+      <div style="font-size:10px;color:#6B7280;margin-bottom:5px;">${k.label}</div>
+      <div style="font-size:22px;font-weight:700;color:${k.cls||'#1A1F2E'};">${k.val??'—'}${k.val!=null?k.suffix:''}</div>
+    </div>`).join('');
+}
+
+function dbMakeChart(id, config) {
+  if (DB_CHARTS[id]) { DB_CHARTS[id].destroy(); }
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  DB_CHARTS[id] = new Chart(ctx, config);
+}
+
+const DB_GRID = { color:'#F0F2F5' };
+const DB_TICK = { font:{size:10}, color:'#6B7280' };
+const DB_BASE_SCALES = {
+  x: { grid:DB_GRID, ticks:DB_TICK },
+  y: { grid:DB_GRID, ticks:DB_TICK },
+};
+
+function dbLine(labels, datasets) {
+  return { type:'line', data:{labels,datasets},
+    options:{ animation:{duration:300},
+      plugins:{ legend:{ display:datasets.length>1, position:'bottom',
+        labels:{font:{size:10},boxWidth:10,padding:8} } },
+      scales: DB_BASE_SCALES } };
+}
+function dbDS(label,data,color,fill=false) {
+  return { label,data, borderColor:color, backgroundColor:fill?color+'22':color+'00',
+    borderWidth:2, pointRadius:data.length<=30?3:1, pointBackgroundColor:color,
+    fill, tension:0.3 };
+}
+
+function renderDBCharts(data) {
+  const labels = data.map(r=>dbShortDate(r.date));
+
+  // EFF
+  dbMakeChart('db-chart-eff', dbLine(labels,
+    [dbDS('EFF (%)', data.map(r=>r.eff_pct??null), '#2563EB', true)]));
+
+  // Utilization
+  dbMakeChart('db-chart-util', dbLine(labels,
+    [dbDS('MC Util (%)', data.map(r=>r.mc_utilization_pct??null), '#0D9488', true)]));
+
+  // Defect rate
+  dbMakeChart('db-chart-def', dbLine(labels,
+    [dbDS('Defect %', data.map(r=>r.defect_rate_pct??null), '#DC2626', true)]));
+
+  // Target vs Actual bar
+  dbMakeChart('db-chart-output', { type:'bar',
+    data:{ labels, datasets:[
+      { label:'Target/day', data:data.map(r=>r.target_output_day??null),
+        backgroundColor:'#1A274499', borderRadius:3, barPercentage:0.6 },
+      { label:'Actual HC',  data:data.map(r=>r.actual_output_day_hc??null),
+        backgroundColor:'#E8542ACC', borderRadius:3, barPercentage:0.6 },
+    ]},
+    options:{ animation:{duration:300},
+      plugins:{ legend:{ display:true, position:'bottom',
+        labels:{font:{size:10},boxWidth:10,padding:8} } },
+      scales: DB_BASE_SCALES } });
+
+  // Time stacked bar
+  dbMakeChart('db-chart-time', { type:'bar',
+    data:{ labels, datasets:[
+      { label:'Working',     data:data.map(r=>r.machine_working_time||0), backgroundColor:'#16A34ACC', borderRadius:2 },
+      { label:'Change-over', data:data.map(r=>r.changeover_time||0),     backgroundColor:'#D97706CC', borderRadius:2 },
+      { label:'Breakdown',   data:data.map(r=>r.breakdown_time||0),      backgroundColor:'#DC2626CC', borderRadius:2 },
+      { label:'Idle',        data:data.map(r=>r.idle_time||0),           backgroundColor:'#9CA3AFCC', borderRadius:2 },
+    ]},
+    options:{ animation:{duration:300},
+      plugins:{ legend:{ display:true, position:'bottom',
+        labels:{font:{size:10},boxWidth:10,padding:8} } },
+      scales:{
+        x:{...DB_BASE_SCALES.x, stacked:true},
+        y:{...DB_BASE_SCALES.y, stacked:true,
+           ticks:{...DB_TICK, callback:v=>v+' min'}} } } });
+
+  // Defect types doughnut
+  const defMap = {};
+  data.forEach(r => (r.defects||[]).forEach(d => {
+    if (d.name) defMap[d.name] = (defMap[d.name]||0) + (d.qty||0);
+  }));
+  const defEntries = Object.entries(defMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const PAL = ['#DC2626','#E8542A','#D97706','#7C3AED','#2563EB','#0D9488','#16A34A','#1A2744'];
+  dbMakeChart('db-chart-deftype', defEntries.length ? {
+    type:'doughnut',
+    data:{ labels:defEntries.map(e=>e[0]),
+      datasets:[{ data:defEntries.map(e=>e[1]),
+        backgroundColor:PAL.slice(0,defEntries.length),
+        borderWidth:2, borderColor:'#fff' }] },
+    options:{ cutout:'55%', animation:{duration:300},
+      plugins:{ legend:{ display:true, position:'right',
+        labels:{font:{size:10},boxWidth:10,padding:6} } } }
+  } : { type:'doughnut',
+    data:{ labels:['Chưa có dữ liệu'], datasets:[{data:[1],backgroundColor:['#E5E7EB']}] },
+    options:{ plugins:{legend:{display:false}}, animation:{duration:0} } });
+
+  // EFF by project horizontal bar
+  const projMap = {};
+  data.forEach(r => {
+    if (!projMap[r.project]) projMap[r.project]=[];
+    if (r.eff_pct!=null) projMap[r.project].push(r.eff_pct);
+  });
+  const projs = Object.keys(projMap);
+  const avgs  = projs.map(p => {
+    const v = projMap[p];
+    return v.length ? +(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1) : 0;
+  });
+  dbMakeChart('db-chart-proj', { type:'bar',
+    data:{ labels:projs,
+      datasets:[{ label:'EFF TB (%)', data:avgs,
+        backgroundColor:avgs.map(v=>v>=85?'#16A34ACC':v>=65?'#D97706CC':'#DC2626CC'),
+        borderRadius:5, barPercentage:0.5 }] },
+    options:{ indexAxis:'y', animation:{duration:300},
+      plugins:{ legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.x}%`}} },
+      scales:{
+        x:{...DB_BASE_SCALES.x, min:0, max:120,
+           ticks:{...DB_TICK, callback:v=>v+'%'}},
+        y: DB_BASE_SCALES.y } } });
+}
+
+// Init dashboard date range on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const to   = new Date();
+  const from = new Date(); from.setDate(from.getDate()-30);
+  const fmt  = d => d.toISOString().split('T')[0];
+  const dbTo = document.getElementById('db-to');
+  const dbFr = document.getElementById('db-from');
+  if (dbTo) dbTo.value = fmt(to);
+  if (dbFr) dbFr.value = fmt(from);
+});
+
 </script>
 </body>
 </html>
