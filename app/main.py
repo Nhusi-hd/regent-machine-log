@@ -9,7 +9,7 @@ from datetime import datetime
 from .excel import build_excel
 from .excel_monthly import build_monthly_excel
 from .database import init_db, save_record, get_records
-from .gsheets import push_to_sheet, GOOGLE_SHEETS_ENABLED
+from .gsheets import push_to_sheet, write_monthly_sheet, GOOGLE_SHEETS_ENABLED
 
 app = FastAPI(title="Regent Machine Log API", version="2.0.0")
 
@@ -235,6 +235,38 @@ def health():
         "google_sheets": GOOGLE_SHEETS_ENABLED,
     }
 
+
+
+# ── 10. Ghi toàn bộ tháng lên Google Sheet theo đúng template ────
+@app.post("/api/sheets/write-monthly")
+def write_monthly_to_sheet(
+    year:           int,
+    month:          int,
+    spreadsheet_id: Optional[str] = Query(default=None),
+    project:        Optional[str] = Query(default=None),
+):
+    """
+    Lấy data từ DB theo tháng → ghi lên Google Sheet
+    đúng format template (rows=chỉ số, cols=ngày, màu vàng/xanh).
+    """
+    from .gsheets import write_monthly_sheet, GOOGLE_SHEETS_ENABLED, SPREADSHEET_ID
+    if not GOOGLE_SHEETS_ENABLED:
+        raise HTTPException(503, "Google Sheets chưa được cấu hình")
+    import calendar as cal
+    _, last_day = cal.monthrange(year, month)
+    date_from   = f"{year}-{month:02d}-01"
+    date_to     = f"{year}-{month:02d}-{last_day:02d}"
+    all_records = get_records(limit=5000)
+    records     = [
+        r for r in all_records
+        if date_from <= r["date"] <= date_to
+        and (project is None or r["project"] == project)
+    ]
+    if not records:
+        raise HTTPException(404, f"Không có dữ liệu tháng {month}/{year}")
+    sid    = spreadsheet_id or SPREADSHEET_ID
+    result = write_monthly_sheet(records, year, month, sid)
+    return result
 
 # ── Serve HTML ────────────────────────────────────────────────────
 @app.get("/")

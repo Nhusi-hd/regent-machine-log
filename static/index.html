@@ -736,6 +736,15 @@ input.formula {
     <button id="db-btn-load" onclick="loadDashboard()"
       style="height:32px;padding:0 16px;border-radius:7px;border:none;background:var(--navy);
              color:#fff;font-size:12px;font-weight:600;cursor:pointer;">📊 Xem báo cáo</button>
+    <button onclick="writeMonthlyToSheet()"
+      style="height:32px;padding:0 14px;border-radius:7px;border:none;background:#16a34a;
+             color:#fff;font-size:12px;font-weight:600;cursor:pointer;"
+      title="Ghi dữ liệu tháng lên Google Sheet theo đúng format template">
+      🟢 Ghi lên Sheet
+    </button>
+  </div>
+  <div id="db-sheet-hint" style="display:none;margin-bottom:10px;padding:8px 12px;
+       background:#dcfce7;border:1px solid #86efac;border-radius:7px;font-size:11px;color:#15803d;">
   </div>
 
   <!-- KPI row -->
@@ -1503,6 +1512,42 @@ document.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem(SHEET_ID_KEY);
   if (saved) document.getElementById('sheet-id-input').value = saved;
 });
+
+async function writeMonthlyToSheet() {
+  const sid = getSheetId();
+  if (!sid) {
+    showToast('Vui lòng cấu hình Google Sheet ID trước (tab Nhập liệu → ⚙ Cấu hình)', 'err');
+    return;
+  }
+  // Lấy năm/tháng từ filter
+  const from = document.getElementById('db-from')?.value || '';
+  const d    = from ? new Date(from) : new Date();
+  const year  = d.getFullYear();
+  const month = d.getMonth() + 1;
+
+  const proj = document.getElementById('db-project')?.value || '';
+  showToast('🟢 Đang ghi lên Google Sheet...', 'loading');
+
+  try {
+    let url = `${API_BASE}/api/sheets/write-monthly?year=${year}&month=${month}&spreadsheet_id=${encodeURIComponent(sid)}`;
+    if (proj) url += `&project=${encodeURIComponent(proj)}`;
+
+    const res = await fetch(url, { method:'POST', signal: AbortSignal.timeout(30000) });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    showToast(`✓ Đã ghi ${data.total_projects} sheet lên Google Sheet!`, 'ok');
+
+    const hint = document.getElementById('db-sheet-hint');
+    hint.style.display = 'block';
+    hint.innerHTML = `✓ Đã ghi tháng <strong>${data.month}</strong> — 
+      ${data.tabs.map(t => `<a href="${t.url}" target="_blank" style="color:#15803d;font-weight:600;">${t.project} ↗</a>`).join(' · ')}`;
+  } catch(e) {
+    showToast('Lỗi: ' + e.message, 'err');
+  }
+}
 
 </script>
 </body>

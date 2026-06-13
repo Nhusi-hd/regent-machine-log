@@ -1,247 +1,457 @@
 """
-gsheets.py — Kết nối Google Sheets API v4
-─────────────────────────────────────────
-Cách hoạt động:
-  • Mỗi dự án → 1 tab riêng trong Google Sheet
-  • Mỗi lần nhấn "Lưu & Gửi Sheet" → append 1 dòng mới vào tab đó
-  • Header row tự tạo (màu navy) nếu tab chưa tồn tại
-  • Hàng EFF/Defect rate tự tô màu xanh (công thức)
+gsheets.py — Ghi Google Sheet đúng format template gốc:
 
-Biến môi trường cần set trên Render:
-  GOOGLE_SERVICE_ACCOUNT_JSON  → nội dung file JSON service account
-  SPREADSHEET_ID               → ID của Google Sheet (lấy từ URL)
+Layout:
+  Cột A  = Section label  ("Overall" merge rows 3→21, "Defect (pcs)" merge rows defect)
+  Cột B  = Row label      (tên chỉ số)
+  Cột C+ = Ngày           (05-Jun, 06-Jun, ...)
+
+Màu:
+  Xanh lá  (#00B050) = Tên Dự Án
+  Xanh blue (#00B0F0) = công thức (Target, EFF, Defect rate, MC util, Total defect)
+  Vàng     (#FFD700) = nhập tay
+  Xanh cyan (#00B0F0 đậm) = Total defect row
+  Navy     (#1A2744) = header Date row
 """
 
-import os, json
+import os, json, calendar
+from datetime import date
 
-# ── Kiểm tra đã cấu hình chưa ────────────────────────────────────
+# ── Env vars ──────────────────────────────────────────────────────
 GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 SPREADSHEET_ID              = os.getenv("SPREADSHEET_ID", "")
 GOOGLE_SHEETS_ENABLED       = bool(GOOGLE_SERVICE_ACCOUNT_JSON and SPREADSHEET_ID)
 
-# ── Màu sắc (RGB dạng dict cho Sheets API) ───────────────────────
-def _rgb(hex_color: str) -> dict:
-    """Chuyển hex string → dict {red, green, blue} (0.0–1.0)."""
-    h = hex_color.lstrip("#")
-    return {
-        "red":   int(h[0:2], 16) / 255,
-        "green": int(h[2:4], 16) / 255,
-        "blue":  int(h[4:6], 16) / 255,
-    }
+# ── Màu → RGB dict cho Sheets API ────────────────────────────────
+def _c(h):
+    h = h.lstrip("#")
+    return {"red": int(h[0:2],16)/255, "green": int(h[2:4],16)/255, "blue": int(h[4:6],16)/255}
 
-NAVY_RGB   = _rgb("1A2744")
-YELLOW_RGB = _rgb("FFD700")
-BLUE_RGB   = _rgb("00B0F0")
-WHITE_RGB  = _rgb("FFFFFF")
-GREEN_RGB  = _rgb("00B050")
-GRAY_RGB   = _rgb("F2F2F2")
+C_NAVY      = _c("1A2744")
+C_WHITE     = _c("FFFFFF")
+C_YELLOW    = _c("FFD700")
+C_BLUE      = _c("00B0F0")
+C_GREEN     = _c("00B050")
+C_CYAN      = _c("00CCEE")
+C_GRAY      = _c("F2F2F2")
+C_LIGHT     = _c("DDEEFF")
+C_OVERALL   = _c("E8F0FE")   # màu section Overall (xanh lavender nhạt)
+C_DEFECT_S  = _c("DCE6F1")   # màu section Defect (xanh nhạt)
+C_BLUE_TXT  = _c("0070C0")
+C_BLACK     = _c("000000")
 
-# ── Danh sách cột ────────────────────────────────────────────────
-# (header_label, db_field_or_computed, is_formula)
-COLUMNS = [
-    ("Ngày",                   "date",                    False),
-    ("Dự Án",                  "project",                 False),
-    ("MO/Color",               "mo_color",                False),
-    ("Máy/Line",               "machine_line",            False),
-    ("SAM",                    "sam",                     False),
-    ("SWT (h)",                "standard_working_time",   False),
-    ("HC vận hành",            "hc_operators",            False),
-    ("Target/day (pcs)",       "target_output_day",       True),
-    ("Auto Target/h/HC",       "auto_target_h_hc",        True),
-    ("Actual HC/day (pcs)",    "actual_output_day_hc",    False),
-    ("Actual MC/day (pcs)",    "actual_output_day_mc",    False),
-    ("Auto/h/HC (pcs)",        "auto_output_h_hc",        False),
-    ("Actual/h/MC (pcs)",      "actual_output_h_mc",      False),
-    ("Manual/day/HC (pcs)",    "manual_output_day_hc",    False),
-    ("Manual/h/HC (pcs)",      "manual_output_h_hc",      False),
-    ("Working time (min)",     "machine_working_time",    False),
-    ("Change-over (min)",      "changeover_time",         False),
-    ("Breakdown (min)",        "breakdown_time",          False),
-    ("Idle (min)",             "idle_time",               False),
-    ("Total time (min)",       "total_time_min",          True),
-    ("EFF (%)",                "eff_pct",                 True),
-    ("MC Utilization (%)",     "mc_utilization_pct",      True),
-    ("Total Defect (pcs)",     "total_defect",            True),
-    ("Defect rate (%)",        "defect_rate_pct",         True),
-    ("Defect detail",          "_defects_str",            False),
+# ── Row definitions (đúng thứ tự template) ───────────────────────
+# (label_cot_B,  db_field,               mau_label, is_formula)
+OVERALL_ROWS = [
+    ("Tên Dự Án",                "project",              "GREEN",  False),
+    ("MO/Color",                 "mo_color",             "YELLOW", False),
+    ("SAM (testing)",            "sam",                  "YELLOW", False),
+    ("Target output / day (pcs)","target_output_day",    "BLUE",   True),
+    ("Auto target output/h/HC",  "auto_target_h_hc",     "BLUE",   True),
+    ("Actual ouput/day/HC(pcs)", "actual_output_day_hc", "YELLOW", False),
+    ("Actual ouput/day/MC(pcs)", "actual_output_day_mc", "YELLOW", False),
+    ("Auto output/h/HC (pcs)",   "auto_output_h_hc",     "YELLOW", False),
+    ("Actual output/h/MC (pcs)", "actual_output_h_mc",   "YELLOW", False),
+    ("Defect rate (%)",          "defect_rate_pct",      "BLUE",   True),
+    ("EFF(%)",                   "eff_pct",              "YELLOW", False),  # vàng theo template
+    ("Mc utilization (%)",       "mc_utilization_pct",   "BLUE",   True),
+    ("Manual output/day/HC (pcs)","manual_output_day_hc","YELLOW", False),
+    ("Manual output/h/HC (pcs)", "manual_output_h_hc",   "YELLOW", False),
+    ("Machine working time (min)","machine_working_time", "YELLOW", False),
+    ("Change-over time(min)",    "changeover_time",      "YELLOW", False),
+    ("Breakdown time(min)",      "breakdown_time",       "YELLOW", False),
+    ("Idle time(min)",           "idle_time",            "YELLOW", False),
 ]
 
-HEADERS = [col[0] for col in COLUMNS]
+COLOR_MAP = {
+    "GREEN":  C_GREEN,
+    "YELLOW": C_YELLOW,
+    "BLUE":   C_BLUE,
+}
 
-
-# ── Khởi tạo Google Sheets service ───────────────────────────────
 def _get_service():
     try:
         from google.oauth2.service_account import Credentials
         from googleapiclient.discovery import build
     except ImportError:
-        raise RuntimeError(
-            "Thiếu thư viện Google. Chạy: "
-            "pip install google-auth google-api-python-client"
-        )
+        raise RuntimeError("pip install google-auth google-api-python-client")
     if not GOOGLE_SERVICE_ACCOUNT_JSON:
         raise RuntimeError("Chưa set GOOGLE_SERVICE_ACCOUNT_JSON")
-
     info  = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
     creds = Credentials.from_service_account_info(
-        info,
-        scopes=["https://www.googleapis.com/auth/spreadsheets"],
-    )
+        info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 
-# ── Lấy sheet_id từ tab name ─────────────────────────────────────
-def _get_sheet_id(service, spreadsheet_id: str, tab_name: str) -> int:
+def _get_sheet_id(service, spreadsheet_id, tab_name):
     meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     for s in meta["sheets"]:
         if s["properties"]["title"] == tab_name:
             return s["properties"]["sheetId"]
-    return 0
+    return None
 
 
-# ── Format header row (màu navy + chữ trắng) ─────────────────────
-def _format_header(service, spreadsheet_id: str, sheet_id: int, num_cols: int):
-    """Tô màu header row 1 và các ô công thức."""
-    col_formats = []
+def _working_days(year, month):
+    """Trả về list date là Mon–Sat trong tháng."""
+    _, last = calendar.monthrange(year, month)
+    return [date(year, month, d) for d in range(1, last+1)
+            if date(year, month, d).weekday() < 6]
 
-    for i, (_, _, is_formula) in enumerate(COLUMNS):
-        bg = BLUE_RGB if is_formula else NAVY_RGB
-        col_formats.append({
-            "repeatCell": {
-                "range": {
-                    "sheetId":          sheet_id,
-                    "startRowIndex":    0,
-                    "endRowIndex":      1,
-                    "startColumnIndex": i,
-                    "endColumnIndex":   i + 1,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": bg,
-                        "textFormat": {
-                            "foregroundColor": WHITE_RGB,
-                            "bold": True,
-                            "fontSize": 10,
-                            "fontFamily": "Calibri",
-                        },
-                        "horizontalAlignment": "CENTER",
-                        "verticalAlignment":   "MIDDLE",
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)",
-            }
-        })
 
-    # Freeze row 1
-    col_formats.append({
-        "updateSheetProperties": {
-            "properties": {
+# ── Batch update helper ───────────────────────────────────────────
+def _fmt(requests, service, spreadsheet_id):
+    if requests:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute()
+
+
+# ── Cell format builder ───────────────────────────────────────────
+def _cell_fmt(sheet_id, r1, c1, r2, c2, bg=None, bold=False,
+              fg=None, size=10, halign="CENTER", border=True):
+    fmt = {
+        "textFormat": {
+            "bold": bold,
+            "fontSize": size,
+            "fontFamily": "Calibri",
+        },
+        "horizontalAlignment": halign,
+        "verticalAlignment":   "MIDDLE",
+    }
+    if bg:  fmt["backgroundColor"]  = bg
+    if fg:  fmt["textFormat"]["foregroundColor"] = fg
+
+    req = {
+        "repeatCell": {
+            "range": {"sheetId": sheet_id,
+                      "startRowIndex": r1, "endRowIndex": r2,
+                      "startColumnIndex": c1, "endColumnIndex": c2},
+            "cell": {"userEnteredFormat": fmt},
+            "fields": "userEnteredFormat(" + ",".join([
+                "backgroundColor" if bg else "",
+                "textFormat",
+                "horizontalAlignment",
+                "verticalAlignment",
+            ]).strip(",") + ")",
+        }
+    }
+    return req
+
+
+def _merge(sheet_id, r1, c1, r2, c2):
+    return {"mergeCells": {
+        "range": {"sheetId": sheet_id,
+                  "startRowIndex": r1, "endRowIndex": r2,
+                  "startColumnIndex": c1, "endColumnIndex": c2},
+        "mergeType": "MERGE_ALL"
+    }}
+
+
+def _border_req(sheet_id, r1, c1, r2, c2):
+    s = {"style": "SOLID", "color": _c("BFBFBF"), "width": 1}
+    return {"updateBorders": {
+        "range": {"sheetId": sheet_id,
+                  "startRowIndex": r1, "endRowIndex": r2,
+                  "startColumnIndex": c1, "endColumnIndex": c2},
+        "top": s, "bottom": s, "left": s, "right": s,
+        "innerHorizontal": s, "innerVertical": s,
+    }}
+
+
+def _col_width(sheet_id, col_idx, width_px):
+    return {"updateDimensionProperties": {
+        "range": {"sheetId": sheet_id, "dimension": "COLUMNS",
+                  "startIndex": col_idx, "endIndex": col_idx+1},
+        "properties": {"pixelSize": width_px},
+        "fields": "pixelSize",
+    }}
+
+def _row_height(sheet_id, row_idx, height_px):
+    return {"updateDimensionProperties": {
+        "range": {"sheetId": sheet_id, "dimension": "ROWS",
+                  "startIndex": row_idx, "endIndex": row_idx+1},
+        "properties": {"pixelSize": height_px},
+        "fields": "pixelSize",
+    }}
+
+
+# ════════════════════════════════════════════════════════════════
+# MAIN: Tạo/cập nhật Sheet theo đúng template
+# ════════════════════════════════════════════════════════════════
+def write_monthly_sheet(records: list, year: int, month: int,
+                        spreadsheet_id: str, tab_suffix: str = "") -> dict:
+    """
+    Ghi dữ liệu tháng lên Google Sheet đúng format template:
+    - Mỗi dự án = 1 tab
+    - Rows = chỉ số, Cols = ngày làm việc
+    - Màu vàng/xanh đúng template
+
+    records: list dict từ DB (đã có computed fields + defects list)
+    """
+    service      = _get_service()
+    working_days = _working_days(year, month)
+    month_abbr   = calendar.month_abbr[month]
+
+    # Nhóm theo dự án
+    proj_map: dict = {}
+    for r in records:
+        proj_map.setdefault(r["project"], []).append(r)
+
+    result_tabs = []
+
+    for proj_name, proj_records in proj_map.items():
+        date_map = {r["date"]: r for r in proj_records}
+
+        # ── Tạo/lấy tab ───────────────────────────────────────────
+        tab_name = (proj_name[:28] + tab_suffix)[:31]
+        meta     = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        existing = {s["properties"]["title"]: s["properties"]["sheetId"]
+                    for s in meta["sheets"]}
+
+        if tab_name in existing:
+            # Xóa nội dung cũ để ghi lại
+            sheet_id = existing[tab_name]
+            service.spreadsheets().values().clear(
+                spreadsheetId=spreadsheet_id,
+                range=f"'{tab_name}'",
+                body={}
+            ).execute()
+            # Bỏ merge cũ
+            _fmt([{"unmergeCells": {"range": {
                 "sheetId": sheet_id,
-                "gridProperties": {"frozenRowCount": 1},
-            },
-            "fields": "gridProperties.frozenRowCount",
-        }
-    })
+                "startRowIndex": 0, "endRowIndex": 200,
+                "startColumnIndex": 0, "endColumnIndex": 50,
+            }}}], service, spreadsheet_id)
+        else:
+            res = service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": [{"addSheet": {
+                    "properties": {"title": tab_name}
+                }}]}
+            ).execute()
+            sheet_id = res["replies"][0]["addSheet"]["properties"]["sheetId"]
 
-    # Auto-resize tất cả cột
-    col_formats.append({
-        "autoResizeDimensions": {
-            "dimensions": {
-                "sheetId":    sheet_id,
-                "dimension":  "COLUMNS",
-                "startIndex": 0,
-                "endIndex":   num_cols,
-            }
-        }
-    })
+        # ── Chuẩn bị dữ liệu ──────────────────────────────────────
+        # Thu thập tất cả tên lỗi
+        defect_names = []
+        for rec in proj_records:
+            for d in (rec.get("defects") or []):
+                if d.get("name") and d["name"] not in defect_names:
+                    defect_names.append(d["name"])
 
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"requests": col_formats},
-    ).execute()
+        num_days    = len(working_days)
+        num_cols    = 2 + num_days      # A, B, ngày...
+        last_col    = num_cols          # 1-based
+        OVERALL_LEN = len(OVERALL_ROWS)
+
+        # Row indices (0-based)
+        R_TITLE     = 0
+        R_DATE_HDR  = 1
+        R_OVERALL_S = 2                             # Tên Dự Án
+        R_OVERALL_E = R_OVERALL_S + OVERALL_LEN    # exclusive
+        R_NAME_HDR  = R_OVERALL_E                  # "Name" row
+        R_DEFECT_S  = R_NAME_HDR + 1
+        R_DEFECT_E  = R_DEFECT_S + max(len(defect_names), 1)
+        R_TOTAL     = R_DEFECT_E
+        TOTAL_ROWS  = R_TOTAL + 1
+
+        # ── Ghi giá trị (values) ──────────────────────────────────
+        all_values = []
+
+        # Row 0: Title
+        title_row = [f"DAILY MACHINE PERFORMANCE LOG — {proj_name.upper()} — {month_abbr}-{year}"]
+        title_row += [""] * (num_cols - 1)
+        all_values.append(title_row)
+
+        # Row 1: Date header
+        date_hdr = ["", "Date"]
+        for d in working_days:
+            date_hdr.append(f"{d.day:02d}-{month_abbr}")
+        all_values.append(date_hdr)
+
+        # Rows Overall
+        for label, field, color, is_formula in OVERALL_ROWS:
+            row = ["", label]
+            for d in working_days:
+                date_str = d.strftime("%Y-%m-%d")
+                rec      = date_map.get(date_str)
+                val      = ""
+                if rec:
+                    v = rec.get(field)
+                    if v is not None:
+                        if field in ("eff_pct","defect_rate_pct","mc_utilization_pct"):
+                            val = round(float(v), 1)
+                        elif field in ("target_output_day","actual_output_day_hc",
+                                       "actual_output_day_mc","manual_output_day_hc",
+                                       "machine_working_time","changeover_time",
+                                       "breakdown_time","idle_time"):
+                            val = int(v)
+                        else:
+                            val = v
+                row.append(val)
+            all_values.append(row)
+
+        # Row "Name" (defect header)
+        name_row = ["", "Name"] + [""] * num_days
+        all_values.append(name_row)
+
+        # Defect rows
+        if defect_names:
+            for dname in defect_names:
+                row = ["", dname]
+                for d in working_days:
+                    date_str = d.strftime("%Y-%m-%d")
+                    rec      = date_map.get(date_str)
+                    qty      = ""
+                    if rec:
+                        for def_item in (rec.get("defects") or []):
+                            if def_item.get("name") == dname:
+                                qty = int(def_item.get("qty", 0)) or ""
+                                break
+                    row.append(qty)
+                all_values.append(row)
+        else:
+            all_values.append(["", ""] + [""] * num_days)
+
+        # Total defect row
+        total_row = ["Total defect", ""]
+        for d in working_days:
+            date_str = d.strftime("%Y-%m-%d")
+            rec      = date_map.get(date_str)
+            total_row.append(int(rec.get("total_defect", 0)) if rec else "")
+        all_values.append(total_row)
+
+        # Ghi tất cả giá trị 1 lần
+        service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range=f"'{tab_name}'!A1",
+            valueInputOption="USER_ENTERED",
+            body={"values": all_values},
+        ).execute()
+
+        # ── Formatting requests ────────────────────────────────────
+        reqs = []
+
+        # Kích thước cột
+        reqs.append(_col_width(sheet_id, 0, 90))   # A: section label
+        reqs.append(_col_width(sheet_id, 1, 220))  # B: row label
+        for ci in range(num_days):
+            reqs.append(_col_width(sheet_id, ci+2, 80))
+
+        # Row heights
+        reqs.append(_row_height(sheet_id, R_TITLE, 28))
+        reqs.append(_row_height(sheet_id, R_DATE_HDR, 22))
+        for ri in range(R_OVERALL_S, R_TOTAL + 1):
+            reqs.append(_row_height(sheet_id, ri, 18))
+
+        # Title row: merge + navy
+        reqs.append(_merge(sheet_id, R_TITLE, 0, R_TITLE+1, num_cols))
+        reqs.append(_cell_fmt(sheet_id, R_TITLE, 0, R_TITLE+1, num_cols,
+            bg=C_NAVY, bold=True, fg=C_WHITE, size=12, halign="CENTER"))
+
+        # Date header row: navy
+        reqs.append(_cell_fmt(sheet_id, R_DATE_HDR, 0, R_DATE_HDR+1, num_cols,
+            bg=C_NAVY, bold=True, fg=C_WHITE, size=10))
+        reqs.append(_cell_fmt(sheet_id, R_DATE_HDR, 1, R_DATE_HDR+1, 2,
+            bg=C_NAVY, bold=True, fg=C_WHITE, halign="CENTER"))
+
+        # "Overall" label: merge A3:A(R_OVERALL_E+1), section color
+        reqs.append(_merge(sheet_id, R_OVERALL_S, 0, R_OVERALL_E, 1))
+        reqs.append(_cell_fmt(sheet_id, R_OVERALL_S, 0, R_OVERALL_E, 1,
+            bg=C_OVERALL, bold=False, fg=C_BLACK, size=10, halign="CENTER"))
+        # Ghi chữ "Overall" vào cell đầu của merge
+        service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range=f"'{tab_name}'!A{R_OVERALL_S+1}",
+            valueInputOption="RAW",
+            body={"values": [["Overall"]]},
+        ).execute()
+
+        # Màu từng row label (cột B) và data cells theo màu template
+        for ri, (label, field, color, is_formula) in enumerate(OVERALL_ROWS):
+            row_idx = R_OVERALL_S + ri
+            bg = COLOR_MAP[color]
+            fg = C_BLUE_TXT if color == "BLUE" else C_BLACK
+            # Label cột B
+            reqs.append(_cell_fmt(sheet_id, row_idx, 1, row_idx+1, 2,
+                bg=bg, bold=(color=="BLUE"), fg=fg, halign="LEFT"))
+            # Data cells (cột C trở đi)
+            reqs.append(_cell_fmt(sheet_id, row_idx, 2, row_idx+1, num_cols,
+                bg=bg, bold=(color=="BLUE"), fg=fg, halign="CENTER"))
+
+        # "Name" row header
+        reqs.append(_cell_fmt(sheet_id, R_NAME_HDR, 0, R_NAME_HDR+1, num_cols,
+            bg=C_GRAY, bold=False, fg=C_BLACK, halign="CENTER"))
+
+        # "Defect (pcs)" section label: merge A + xanh lavender
+        reqs.append(_merge(sheet_id, R_NAME_HDR, 0, R_TOTAL, 1))
+        reqs.append(_cell_fmt(sheet_id, R_NAME_HDR, 0, R_TOTAL, 1,
+            bg=C_DEFECT_S, bold=False, fg=C_BLACK, halign="CENTER"))
+        service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range=f"'{tab_name}'!A{R_NAME_HDR+1}",
+            valueInputOption="RAW",
+            body={"values": [["Defect (pcs)"]]},
+        ).execute()
+
+        # Defect rows: vàng
+        if R_DEFECT_S < R_DEFECT_E:
+            reqs.append(_cell_fmt(sheet_id, R_DEFECT_S, 1, R_DEFECT_E, 2,
+                bg=C_YELLOW, bold=False, fg=C_BLACK, halign="LEFT"))
+            reqs.append(_cell_fmt(sheet_id, R_DEFECT_S, 2, R_DEFECT_E, num_cols,
+                bg=C_YELLOW, bold=False, fg=C_BLACK, halign="CENTER"))
+
+        # Total defect row: merge A+B, xanh cyan
+        reqs.append(_merge(sheet_id, R_TOTAL, 0, R_TOTAL+1, 2))
+        reqs.append(_cell_fmt(sheet_id, R_TOTAL, 0, R_TOTAL+1, num_cols,
+            bg=C_BLUE, bold=True, fg=C_BLUE_TXT, halign="CENTER"))
+
+        # Borders toàn bộ
+        reqs.append(_border_req(sheet_id, R_TITLE, 0, R_TOTAL+1, num_cols))
+
+        # Freeze row 1+2, cột A+B
+        reqs.append({"updateSheetProperties": {
+            "properties": {"sheetId": sheet_id,
+                           "gridProperties": {"frozenRowCount": 2,
+                                              "frozenColumnCount": 2}},
+            "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"
+        }})
+
+        # Landscape + fit to page
+        reqs.append({"updateSpreadsheetProperties": {
+            "properties": {"title": f"Machine Log {month_abbr}-{year}"},
+            "fields": "title"
+        }})
+
+        _fmt(reqs, service, spreadsheet_id)
+
+        sheet_url = (f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+                     f"/edit#gid={sheet_id}")
+        result_tabs.append({"project": proj_name, "tab": tab_name,
+                             "url": sheet_url, "sheet_id": sheet_id})
+
+    return {
+        "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
+        "tabs": result_tabs,
+        "month": f"{month_abbr}-{year}",
+        "total_projects": len(result_tabs),
+    }
 
 
-# ── Format data row (màu vàng/xanh theo loại ô) ──────────────────
-def _format_data_row(service, spreadsheet_id: str, sheet_id: int, row_index: int):
-    """Tô màu dòng data vừa append: vàng=nhập tay, xanh=công thức."""
-    requests = []
-    for i, (_, _, is_formula) in enumerate(COLUMNS):
-        bg = BLUE_RGB if is_formula else YELLOW_RGB
-        requests.append({
-            "repeatCell": {
-                "range": {
-                    "sheetId":          sheet_id,
-                    "startRowIndex":    row_index,
-                    "endRowIndex":      row_index + 1,
-                    "startColumnIndex": i,
-                    "endColumnIndex":   i + 1,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": bg,
-                        "textFormat": {
-                            "bold":       is_formula,
-                            "fontSize":   10,
-                            "fontFamily": "Calibri",
-                            "foregroundColor": _rgb("0070C0") if is_formula else _rgb("000000"),
-                        },
-                        "horizontalAlignment": "CENTER" if is_formula else "LEFT",
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
-            }
-        })
-
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"requests": requests},
-    ).execute()
-
-
-# ── Tạo tab mới nếu chưa có ──────────────────────────────────────
-def _ensure_tab(service, spreadsheet_id: str, tab_name: str) -> tuple:
+# ── Push 1 record (realtime khi nhấn Lưu) ────────────────────────
+def push_to_sheet(entry, computed: dict, spreadsheet_id: str) -> dict:
     """
-    Đảm bảo tab tồn tại với header đã được format.
-    Trả về (tab_name, sheet_id, is_new).
+    Đẩy 1 record vào đúng vị trí cột ngày trong Sheet.
+    Nếu Sheet chưa có layout → tạo mới theo template.
     """
-    meta     = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    existing = {s["properties"]["title"]: s["properties"]["sheetId"]
-                for s in meta["sheets"]}
-
-    if tab_name in existing:
-        return tab_name, existing[tab_name], False
-
-    # Tạo tab mới
-    result = service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]},
-    ).execute()
-    sheet_id = result["replies"][0]["addSheet"]["properties"]["sheetId"]
-
-    # Ghi header row
-    service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range=f"'{tab_name}'!A1",
-        valueInputOption="RAW",
-        body={"values": [HEADERS]},
-    ).execute()
-
-    # Format header
-    _format_header(service, spreadsheet_id, sheet_id, len(HEADERS))
-
-    return tab_name, sheet_id, True
-
-
-# ── Build row data từ entry + computed ───────────────────────────
-def _build_row(entry, computed: dict) -> list:
-    defects_str = "; ".join(
-        f"{d.name}: {int(d.qty)}" for d in (entry.defects or []) if d.name
-    )
-    # Gộp tất cả giá trị vào 1 dict để lookup theo field name
-    merged = {
-        "date":                  entry.date,
+    # Lấy tháng/năm từ entry.date
+    y, m, d = map(int, entry.date.split("-"))
+    # Fake record dict
+    rec = {
         "project":               entry.project,
         "mo_color":              entry.mo_color or "",
+        "date":                  entry.date,
         "machine_line":          entry.machine_line or "",
         "sam":                   entry.sam,
         "standard_working_time": entry.standard_working_time,
@@ -256,143 +466,39 @@ def _build_row(entry, computed: dict) -> list:
         "changeover_time":       entry.changeover_time,
         "breakdown_time":        entry.breakdown_time,
         "idle_time":             entry.idle_time,
-        "_defects_str":          defects_str,
+        "defects":               [{"name": d.name, "qty": d.qty} for d in entry.defects],
         **computed,
     }
-    return [merged.get(field, "") for _, field, _ in COLUMNS]
-
-
-# ── Lấy số dòng hiện tại trong tab ──────────────────────────────
-def _get_last_row(service, spreadsheet_id: str, tab_name: str) -> int:
-    result = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range=f"'{tab_name}'!A:A",
-    ).execute()
-    return len(result.get("values", []))
-
-
-# ════════════════════════════════════════════════════════════════
-# PUBLIC FUNCTIONS
-# ════════════════════════════════════════════════════════════════
-
-def push_to_sheet(entry, computed: dict, spreadsheet_id: str) -> dict:
-    """
-    Đẩy 1 record lên Google Sheet.
-    - Tự tạo tab nếu chưa có
-    - Append dòng mới
-    - Tô màu vàng/xanh theo loại ô
-    Trả về {"url", "tab", "row", "sheet_url"}
-    """
-    service                    = _get_service()
-    tab_name                   = entry.project[:31]
-    tab, sheet_id, _           = _ensure_tab(service, spreadsheet_id, tab_name)
-    row_data                   = _build_row(entry, computed)
-
-    # Append data
-    service.spreadsheets().values().append(
-        spreadsheetId=spreadsheet_id,
-        range=f"'{tab}'!A1",
-        valueInputOption="USER_ENTERED",
-        insertDataOption="INSERT_ROWS",
-        body={"values": [row_data]},
-    ).execute()
-
-    # Lấy index dòng vừa append để format màu
-    last_row = _get_last_row(service, spreadsheet_id, tab)
-    try:
-        _format_data_row(service, spreadsheet_id, sheet_id, last_row - 1)
-    except Exception:
-        pass   # format lỗi không block việc lưu
-
-    sheet_url = (
-        f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
-        f"/edit#gid={sheet_id}"
-    )
+    # Lấy tất cả records cùng project + tháng từ... chỉ record này
+    result = write_monthly_sheet([rec], y, m, spreadsheet_id)
+    # Trả về URL tab của project
+    tab_info = result["tabs"][0] if result["tabs"] else {}
     return {
-        "url":       sheet_url,
-        "tab":       tab,
-        "row":       last_row,
-        "sheet_url": sheet_url,
-    }
-
-
-def push_batch_to_sheet(records: list, spreadsheet_id: str) -> dict:
-    """
-    Đẩy nhiều records cùng lúc (dùng cho sync hàng loạt).
-    records: list of dict từ DB (đã có computed fields).
-    """
-    service  = _get_service()
-    pushed   = 0
-    errors   = []
-
-    # Nhóm theo project
-    proj_map: dict = {}
-    for r in records:
-        proj_map.setdefault(r["project"], []).append(r)
-
-    for proj_name, proj_records in proj_map.items():
-        tab_name          = proj_name[:31]
-        tab, sheet_id, _ = _ensure_tab(service, spreadsheet_id, tab_name)
-
-        rows_to_append = []
-        for r in proj_records:
-            # Tạo fake entry object từ dict
-            class _FakeEntry:
-                pass
-            e = _FakeEntry()
-            for k, v in r.items():
-                setattr(e, k, v)
-            e.defects = [
-                type("D", (), {"name": d.get("name",""), "qty": d.get("qty",0)})()
-                for d in (r.get("defects") or [])
-            ]
-            computed = {k: r.get(k) for k in [
-                "target_output_day","auto_target_h_hc","eff_pct",
-                "mc_utilization_pct","total_time_min","total_defect","defect_rate_pct"
-            ]}
-            rows_to_append.append(_build_row(e, computed))
-
-        try:
-            service.spreadsheets().values().append(
-                spreadsheetId=spreadsheet_id,
-                range=f"'{tab}'!A1",
-                valueInputOption="USER_ENTERED",
-                insertDataOption="INSERT_ROWS",
-                body={"values": rows_to_append},
-            ).execute()
-            pushed += len(rows_to_append)
-        except Exception as ex:
-            errors.append(f"{proj_name}: {str(ex)}")
-
-    return {
-        "pushed": pushed,
-        "errors": errors,
-        "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
+        "url":       tab_info.get("url", ""),
+        "tab":       tab_info.get("tab", ""),
+        "sheet_url": tab_info.get("url", ""),
+        "row":       None,
     }
 
 
 def get_sheet_info(spreadsheet_id: str) -> dict:
-    """Lấy thông tin Sheet: tên, danh sách tabs, số dòng mỗi tab."""
     service = _get_service()
     meta    = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     tabs    = []
     for s in meta["sheets"]:
         title = s["properties"]["title"]
-        # Đếm dòng
         try:
-            res = service.spreadsheets().values().get(
+            res  = service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f"'{title}'!A:A",
-            ).execute()
-            rows = max(0, len(res.get("values", [])) - 1)  # trừ header
+                range=f"'{title}'!A:A").execute()
+            rows = max(0, len(res.get("values", [])) - 2)
         except Exception:
             rows = 0
         tabs.append({"name": title, "records": rows})
-
     return {
-        "title":           meta["properties"]["title"],
-        "spreadsheet_id":  spreadsheet_id,
-        "url":             f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
-        "tabs":            tabs,
-        "total_records":   sum(t["records"] for t in tabs),
+        "title":          meta["properties"]["title"],
+        "spreadsheet_id": spreadsheet_id,
+        "url":            f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
+        "tabs":           tabs,
+        "total_records":  sum(t["records"] for t in tabs),
     }
