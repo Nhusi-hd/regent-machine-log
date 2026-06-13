@@ -614,6 +614,35 @@ input.formula {
   </div>
 
   <!-- ── Actions ── -->
+  <!-- Google Sheet config panel (ẩn/hiện) -->
+  <div id="sheet-panel" style="display:none;background:var(--white);border:1.5px solid #34A853;
+       border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;">
+    <div style="font-size:11px;font-weight:600;color:#1a7a3a;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <span>🟢</span> Google Sheet
+      <span id="sheet-status-badge" style="margin-left:auto;font-size:10px;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#15803d;font-weight:500;">Chưa kết nối</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:10px;color:var(--gray-txt);margin-bottom:3px;">Spreadsheet ID</div>
+        <input id="sheet-id-input" type="text"
+          placeholder="Dán ID từ URL Google Sheet..."
+          style="width:100%;height:32px;padding:0 9px;border-radius:6px;
+                 border:1px solid #86efac;background:#f0fdf4;font-size:12px;
+                 font-family:monospace;">
+      </div>
+      <button onclick="checkSheetStatus()"
+        style="height:32px;padding:0 12px;border-radius:6px;border:none;
+               background:#16a34a;color:#fff;font-size:12px;font-weight:600;cursor:pointer;margin-top:14px;">
+        🔗 Kiểm tra
+      </button>
+    </div>
+    <div id="sheet-info-box" style="display:none;margin-top:8px;font-size:11px;color:#15803d;
+         background:#dcfce7;border-radius:5px;padding:7px 10px;line-height:1.6;"></div>
+    <div style="font-size:10px;color:var(--gray-txt);margin-top:6px;">
+      💡 Lấy ID từ URL: docs.google.com/spreadsheets/d/<strong>[ID ở đây]</strong>/edit
+    </div>
+  </div>
+
   <div class="action-row">
     <button class="btn btn-outline" onclick="resetForm()">↺ Xoá form</button>
     <button class="btn btn-primary" id="btn-save" onclick="submitForm(false)">
@@ -621,6 +650,17 @@ input.formula {
     </button>
     <button class="btn btn-save" id="btn-export" onclick="submitForm(true)">
       ⬇ Lưu &amp; xuất Excel
+    </button>
+    <button class="btn" id="btn-sheet" onclick="submitToSheet()"
+      style="background:#16a34a;color:#fff;padding:0 14px;"
+      title="Lưu DB + đẩy lên Google Sheet">
+      🟢 Gửi Sheet
+    </button>
+  </div>
+  <div style="text-align:right;margin-top:5px;">
+    <button onclick="toggleSheetPanel()"
+      style="font-size:10px;color:var(--gray-txt);background:none;border:none;cursor:pointer;text-decoration:underline;">
+      ⚙ Cấu hình Google Sheet
     </button>
   </div>
 
@@ -1360,6 +1400,108 @@ document.addEventListener('DOMContentLoaded', () => {
   const dbFr = document.getElementById('db-from');
   if (dbTo) dbTo.value = fmt(to);
   if (dbFr) dbFr.value = fmt(from);
+});
+
+
+// ════════════════════════════════════════════════════════════════
+// GOOGLE SHEET JS
+// ════════════════════════════════════════════════════════════════
+const SHEET_ID_KEY = 'regent_sheet_id';
+
+function getSheetId() {
+  return document.getElementById('sheet-id-input').value.trim()
+      || localStorage.getItem(SHEET_ID_KEY) || '';
+}
+
+function toggleSheetPanel() {
+  const panel = document.getElementById('sheet-panel');
+  const isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) {
+    const saved = localStorage.getItem(SHEET_ID_KEY) || '';
+    document.getElementById('sheet-id-input').value = saved;
+    if (saved) checkSheetStatus();
+  }
+}
+
+async function checkSheetStatus() {
+  const sid   = getSheetId();
+  const badge = document.getElementById('sheet-status-badge');
+  const info  = document.getElementById('sheet-info-box');
+  if (!sid) { showToast('Vui lòng nhập Spreadsheet ID', 'err'); return; }
+
+  localStorage.setItem(SHEET_ID_KEY, sid);
+  badge.textContent = '⏳ Đang kiểm tra...';
+  badge.style.background = '#fef9c3'; badge.style.color = '#854d0e';
+
+  try {
+    const res  = await fetch(API_BASE + '/api/sheets/info?spreadsheet_id=' + encodeURIComponent(sid),
+                             { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    badge.textContent = '✓ Đã kết nối';
+    badge.style.background = '#dcfce7'; badge.style.color = '#15803d';
+    info.style.display = 'block';
+    info.innerHTML = `
+      📄 <strong>${data.title}</strong><br>
+      📊 Tabs: ${data.tabs.map(t => `${t.name} (${t.records} records)`).join(' · ')}<br>
+      🔗 <a href="${data.url}" target="_blank" style="color:#15803d;">Mở Google Sheet ↗</a>
+    `;
+    showToast('✓ Kết nối Google Sheet thành công!', 'ok');
+  } catch(e) {
+    badge.textContent = '✗ Lỗi';
+    badge.style.background = '#fee2e2'; badge.style.color = '#991b1b';
+    info.style.display = 'none';
+    showToast('Lỗi: ' + e.message, 'err');
+  }
+}
+
+async function submitToSheet() {
+  const sid = getSheetId();
+  if (!sid) {
+    document.getElementById('sheet-panel').style.display = 'block';
+    document.getElementById('sheet-id-input').focus();
+    showToast('Vui lòng nhập Spreadsheet ID trước', 'err');
+    return;
+  }
+  const payload = buildPayload();
+  const err     = validate(payload);
+  if (err) { showToast(err, 'err'); return; }
+
+  const btn = document.getElementById('btn-sheet');
+  btn.disabled = true;
+  showToast('🟢 Đang gửi lên Google Sheet...', 'loading');
+
+  try {
+    const res = await fetch(API_BASE + '/api/log/push-sheet', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ entry: payload, spreadsheet_id: sid }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    showToast('✓ Đã gửi lên Google Sheet — dòng ' + data.row, 'ok');
+    // Mở link Sheet
+    if (data.sheet_url) {
+      setTimeout(() => window.open(data.sheet_url, '_blank'), 1000);
+    }
+  } catch(e) {
+    showToast('Lỗi: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Restore Sheet ID từ localStorage khi load
+document.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem(SHEET_ID_KEY);
+  if (saved) document.getElementById('sheet-id-input').value = saved;
 });
 
 </script>
