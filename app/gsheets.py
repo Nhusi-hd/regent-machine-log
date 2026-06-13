@@ -410,11 +410,11 @@ def write_monthly_sheet(records: list, year: int, month: int,
         # Borders toàn bộ
         reqs.append(_border_req(sheet_id, R_TITLE, 0, R_TOTAL+1, num_cols))
 
-        # Freeze row 1+2, cột A+B
+        # Freeze 2 dòng header (KHÔNG freeze cột — xung đột với merged cells ở cột A+B)
         reqs.append({"updateSheetProperties": {
             "properties": {"sheetId": sheet_id,
                            "gridProperties": {"frozenRowCount": 2,
-                                              "frozenColumnCount": 2}},
+                                              "frozenColumnCount": 0}},
             "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"
         }})
 
