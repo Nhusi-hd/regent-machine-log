@@ -109,7 +109,13 @@ def _fmt(requests, service, spreadsheet_id):
 
 # ── Cell format builder ───────────────────────────────────────────
 def _cell_fmt(sheet_id, r1, c1, r2, c2, bg=None, bold=False,
-              fg=None, size=10, halign="CENTER", border=True):
+              fg=None, size=10, halign="CENTER", border=True,
+              num_format=None):
+    """
+    num_format: dict với 'type' và 'pattern', ví dụ:
+      {"type": "PERCENT", "pattern": "0.0%"}   → hiển thị 85.0%
+      {"type": "NUMBER",  "pattern": "#,##0"}  → hiển thị 1,200
+    """
     fmt = {
         "textFormat": {
             "bold": bold,
@@ -119,8 +125,18 @@ def _cell_fmt(sheet_id, r1, c1, r2, c2, bg=None, bold=False,
         "horizontalAlignment": halign,
         "verticalAlignment":   "MIDDLE",
     }
-    if bg:  fmt["backgroundColor"]  = bg
-    if fg:  fmt["textFormat"]["foregroundColor"] = fg
+    if bg:         fmt["backgroundColor"] = bg
+    if fg:         fmt["textFormat"]["foregroundColor"] = fg
+    if num_format: fmt["numberFormat"] = num_format
+
+    fields_list = [
+        "backgroundColor" if bg else "",
+        "textFormat",
+        "horizontalAlignment",
+        "verticalAlignment",
+        "numberFormat" if num_format else "",
+    ]
+    fields_str = ",".join(f for f in fields_list if f)
 
     req = {
         "repeatCell": {
@@ -128,12 +144,7 @@ def _cell_fmt(sheet_id, r1, c1, r2, c2, bg=None, bold=False,
                       "startRowIndex": r1, "endRowIndex": r2,
                       "startColumnIndex": c1, "endColumnIndex": c2},
             "cell": {"userEnteredFormat": fmt},
-            "fields": "userEnteredFormat(" + ",".join([
-                "backgroundColor" if bg else "",
-                "textFormat",
-                "horizontalAlignment",
-                "verticalAlignment",
-            ]).strip(",") + ")",
+            "fields": f"userEnteredFormat({fields_str})",
         }
     }
     return req
@@ -281,7 +292,9 @@ def write_monthly_sheet(records: list, year: int, month: int,
                     v = rec.get(field)
                     if v is not None:
                         if field in ("eff_pct","defect_rate_pct","mc_utilization_pct"):
-                            val = round(float(v), 1)
+                            # Chia 100 → dạng thập phân 0.xx để Google Sheets
+                            # hiển thị đúng khi format PERCENT (tránh nhân 100 lần)
+                            val = round(float(v) / 100, 4)
                         elif field in ("target_output_day","actual_output_day_hc",
                                        "actual_output_day_mc","manual_output_day_hc",
                                        "machine_working_time","changeover_time",
@@ -369,16 +382,20 @@ def write_monthly_sheet(records: list, year: int, month: int,
         ).execute()
 
         # Màu từng row label (cột B) và data cells theo màu template
+        PCT_FIELDS = {"eff_pct", "defect_rate_pct", "mc_utilization_pct"}
         for ri, (label, field, color, is_formula) in enumerate(OVERALL_ROWS):
-            row_idx = R_OVERALL_S + ri
-            bg = COLOR_MAP[color]
-            fg = C_BLUE_TXT if color == "BLUE" else C_BLACK
+            row_idx    = R_OVERALL_S + ri
+            bg         = COLOR_MAP[color]
+            fg         = C_BLUE_TXT if color == "BLUE" else C_BLACK
+            is_pct     = field in PCT_FIELDS
+            num_fmt    = {"type": "PERCENT", "pattern": "0.0%"} if is_pct else None
             # Label cột B
             reqs.append(_cell_fmt(sheet_id, row_idx, 1, row_idx+1, 2,
                 bg=bg, bold=(color=="BLUE"), fg=fg, halign="LEFT"))
-            # Data cells (cột C trở đi)
+            # Data cells (cột C trở đi) — thêm numberFormat cho các cột %
             reqs.append(_cell_fmt(sheet_id, row_idx, 2, row_idx+1, num_cols,
-                bg=bg, bold=(color=="BLUE"), fg=fg, halign="CENTER"))
+                bg=bg, bold=(color=="BLUE"), fg=fg, halign="CENTER",
+                num_format=num_fmt))
 
         # "Name" row header
         reqs.append(_cell_fmt(sheet_id, R_NAME_HDR, 0, R_NAME_HDR+1, num_cols,
