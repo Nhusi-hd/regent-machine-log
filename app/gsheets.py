@@ -381,20 +381,22 @@ def write_monthly_sheet(records: list, year: int, month: int,
             body={"values": [["Overall"]]},
         ).execute()
 
-        # Màu từng row label (cột B) và data cells theo màu template
+        # Tô màu cột B (label) theo template — data cells C+ để TRẮNG
         PCT_FIELDS = {"eff_pct", "defect_rate_pct", "mc_utilization_pct"}
         for ri, (label, field, color, is_formula) in enumerate(OVERALL_ROWS):
-            row_idx    = R_OVERALL_S + ri
-            bg         = COLOR_MAP[color]
-            fg         = C_BLUE_TXT if color == "BLUE" else C_BLACK
-            is_pct     = field in PCT_FIELDS
-            num_fmt    = {"type": "PERCENT", "pattern": "0.0%"} if is_pct else None
-            # Label cột B
+            row_idx = R_OVERALL_S + ri
+            bg      = COLOR_MAP[color]
+            fg      = C_BLUE_TXT if color == "BLUE" else C_BLACK
+            is_pct  = field in PCT_FIELDS
+            num_fmt = {"type": "PERCENT", "pattern": "0.0%"} if is_pct else None
+
+            # ── Cột B: tô màu theo template (vàng/xanh/xanh lá) ──
             reqs.append(_cell_fmt(sheet_id, row_idx, 1, row_idx+1, 2,
                 bg=bg, bold=(color=="BLUE"), fg=fg, halign="LEFT"))
-            # Data cells (cột C trở đi) — thêm numberFormat cho các cột %
+
+            # ── Data cells C+ : nền TRẮNG, chỉ thêm numberFormat nếu là % ──
             reqs.append(_cell_fmt(sheet_id, row_idx, 2, row_idx+1, num_cols,
-                bg=bg, bold=(color=="BLUE"), fg=fg, halign="CENTER",
+                bg=C_WHITE, bold=False, fg=C_BLACK, halign="CENTER",
                 num_format=num_fmt))
 
         # "Name" row header
@@ -412,17 +414,19 @@ def write_monthly_sheet(records: list, year: int, month: int,
             body={"values": [["Defect (pcs)"]]},
         ).execute()
 
-        # Defect rows: vàng
+        # Defect rows — cột B label tô vàng, data C+ trắng
         if R_DEFECT_S < R_DEFECT_E:
             reqs.append(_cell_fmt(sheet_id, R_DEFECT_S, 1, R_DEFECT_E, 2,
                 bg=C_YELLOW, bold=False, fg=C_BLACK, halign="LEFT"))
             reqs.append(_cell_fmt(sheet_id, R_DEFECT_S, 2, R_DEFECT_E, num_cols,
-                bg=C_YELLOW, bold=False, fg=C_BLACK, halign="CENTER"))
+                bg=C_WHITE, bold=False, fg=C_BLACK, halign="CENTER"))
 
-        # Total defect row: merge A+B, xanh cyan
+        # Total defect row — label A+B merge tô xanh, data C+ trắng
         reqs.append(_merge(sheet_id, R_TOTAL, 0, R_TOTAL+1, 2))
-        reqs.append(_cell_fmt(sheet_id, R_TOTAL, 0, R_TOTAL+1, num_cols,
+        reqs.append(_cell_fmt(sheet_id, R_TOTAL, 0, R_TOTAL+1, 2,
             bg=C_BLUE, bold=True, fg=C_BLUE_TXT, halign="CENTER"))
+        reqs.append(_cell_fmt(sheet_id, R_TOTAL, 2, R_TOTAL+1, num_cols,
+            bg=C_WHITE, bold=False, fg=C_BLACK, halign="CENTER"))
 
         # Borders toàn bộ
         reqs.append(_border_req(sheet_id, R_TITLE, 0, R_TOTAL+1, num_cols))
