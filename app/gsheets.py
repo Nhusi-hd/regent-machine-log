@@ -7,7 +7,7 @@ Layout:
   Cột C+ = Ngày           (05-Jun, 06-Jun, ...)
 
 Màu:
-  Xanh lá  (#00B050) = Tên Dự Án
+  Xanh lá  (#00B050) = không dùng (đã bỏ hàng Tên Dự Án)
   Xanh blue (#00B0F0) = công thức (Target, EFF, Defect rate, MC util, Total defect)
   Vàng     (#FFD700) = nhập tay
   Xanh cyan (#00B0F0 đậm) = Total defect row
@@ -43,7 +43,6 @@ C_BLACK     = _c("000000")
 # ── Row definitions (đúng thứ tự template) ───────────────────────
 # (label_cot_B,  db_field,               mau_label, is_formula)
 OVERALL_ROWS = [
-    ("Tên Dự Án",                "project",              "GREEN",  False),
     ("MO/Color",                 "mo_color",             "YELLOW", False),
     ("SAM (testing)",            "sam",                  "YELLOW", False),
     ("Target output / day (pcs)","target_output_day",    "BLUE",   True),
@@ -259,7 +258,7 @@ def write_monthly_sheet(records: list, year: int, month: int,
         # Row indices (0-based)
         R_TITLE     = 0
         R_DATE_HDR  = 1
-        R_OVERALL_S = 2                             # Tên Dự Án
+        R_OVERALL_S = 2                             # MO/Color (bắt đầu từ đây)
         R_OVERALL_E = R_OVERALL_S + OVERALL_LEN    # exclusive
         R_NAME_HDR  = R_OVERALL_E                  # "Name" row
         R_DEFECT_S  = R_NAME_HDR + 1
@@ -501,6 +500,41 @@ def push_to_sheet(entry, computed: dict, spreadsheet_id: str) -> dict:
         "row":       None,
     }
 
+
+
+def push_batch_to_sheet(records: list, spreadsheet_id: str) -> dict:
+    """
+    Đẩy nhiều records cùng lúc lên Google Sheet theo đúng format template.
+    records: list of dict từ DB (đã có computed fields + defects list).
+    Nhóm theo project + tháng, mỗi nhóm gọi write_monthly_sheet.
+    """
+    if not records:
+        return {"pushed": 0, "errors": [], "spreadsheet_url": ""}
+
+    # Nhóm theo (project, year, month)
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for r in records:
+        try:
+            y, m, _ = r["date"].split("-")
+            groups[(r["project"], int(y), int(m))].append(r)
+        except Exception:
+            continue
+
+    pushed = 0
+    errors = []
+    for (proj, year, month), recs in groups.items():
+        try:
+            result = write_monthly_sheet(recs, year, month, spreadsheet_id)
+            pushed += len(recs)
+        except Exception as ex:
+            errors.append(f"{proj} {month}/{year}: {str(ex)}")
+
+    return {
+        "pushed":           pushed,
+        "errors":           errors,
+        "spreadsheet_url":  f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
+    }
 
 def get_sheet_info(spreadsheet_id: str) -> dict:
     service = _get_service()

@@ -401,7 +401,39 @@ input.formula {
       <span class="card-head-label">Thông tin chung</span>
     </div>
     <div class="card-body">
-      <div class="fg2">
+      <div class="fg3">
+        <div class="f">
+          <div class="f-label">Tên Dự Án <span class="badge badge-m">Nhập tay</span></div>
+          <div style="display:flex;gap:5px;align-items:flex-start;flex-direction:column;">
+            <div style="display:flex;gap:5px;width:100%;">
+              <select class="manual" id="f-project" style="flex:1;" onchange="saveLastValues()">
+                <option value="">-- Chọn dự án --</option>
+                <option>AI Garment Inspection</option>
+                <option>Auto Bagging &amp; Sealing</option>
+                <option>AGV Outdoor Navigation</option>
+                <option>Auto Loading Heat Press</option>
+                <option>Label/Barcode Inspection</option>
+              </select>
+              <button onclick="showAddProject()" title="Thêm dự án mới"
+                style="height:34px;min-width:34px;border-radius:6px;border:1.5px solid var(--yellow-bd);
+                       background:var(--yellow-bg);color:#8a5e00;font-size:20px;line-height:1;
+                       cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+            </div>
+            <div id="add-project-row" style="display:none;width:100%;">
+              <div style="display:flex;gap:5px;">
+                <input class="manual" type="text" id="f-project-new"
+                  placeholder="Nhập tên dự án mới..." style="flex:1;height:32px;"
+                  onkeydown="if(event.key==='Enter')confirmAddProject()">
+                <button onclick="confirmAddProject()"
+                  style="height:32px;padding:0 10px;border-radius:6px;border:none;
+                         background:#1A2744;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">✓ Thêm</button>
+                <button onclick="hideAddProject()"
+                  style="height:32px;padding:0 8px;border-radius:6px;
+                         border:1px solid var(--gray-bd);background:none;font-size:12px;cursor:pointer;">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="f">
           <div class="f-label">MO / Color <span class="badge badge-m">Nhập tay</span></div>
           <input class="manual" type="text" id="f-mo" placeholder="VD: MO-2025-001 / Navy">
@@ -786,11 +818,12 @@ let API_BASE = localStorage.getItem('api_base') || 'https://regent-machine-log.o
 // ── Init ───────────────────────────────────────────────────────
 // ── localStorage keys ──────────────────────────────────────────
 const SAVE_FIELDS = [
-  'f-mo','f-machine','f-sam','f-swt','f-hc',
+  'f-project','f-mo','f-machine','f-sam','f-swt','f-hc',
   'f-actual-hc','f-actual-mc','f-auto-h-hc','f-actual-h-mc',
   'f-manual-day','f-manual-h','f-wt','f-ct','f-bt','f-it'
 ];
 const STORAGE_KEY = 'regent_last_values';
+const PROJECTS_KEY = 'regent_projects';
 
 function saveLastValues() {
   const data = {};
@@ -803,6 +836,7 @@ function saveLastValues() {
 
 function restoreLastValues() {
   // Khôi phục dự án tự thêm trước
+  restoreCustomProjects();
   try {
     const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
     SAVE_FIELDS.forEach(id => {
@@ -952,7 +986,7 @@ function buildPayload() {
     if (name) defects.push({ name, qty });
   });
   return {
-    project:               'Regent',   // không còn chọn project
+    project:               g('f-project')?.value || '',
     mo_color:              g('f-mo').value.trim(),
     date:                  g('f-date').value,
     machine_line:          g('f-machine').value.trim(),
@@ -976,6 +1010,7 @@ function buildPayload() {
 // ── Validate ───────────────────────────────────────────────────
 function validate(payload) {
   // Chỉ bắt buộc 2 trường tối thiểu để lưu
+  if (!payload.project) return 'Vui lòng chọn Tên Dự Án';
   if (!payload.date)    return 'Vui lòng chọn ngày';
   // Các trường còn lại có thể bỏ qua — lưu với giá trị 0
   return null;
@@ -1032,6 +1067,7 @@ function resetForm() {
                'f-manual-day','f-manual-h','f-wt','f-ct','f-bt','f-it'];
   ids.forEach(id => { if(g(id)) g(id).value = ''; });
   g('f-date').valueAsDate = new Date();
+  if(g('f-project')) g('f-project').selectedIndex = 0;
   g('defect-rows').innerHTML = '';
   addDefectRow(); addDefectRow();
   localStorage.removeItem(STORAGE_KEY);  // xoá giá trị đã lưu
@@ -1146,6 +1182,48 @@ async function reExport(id) {
   }
 }
 
+function restoreCustomProjects() {
+  try {
+    const projs = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]');
+    const sel = document.getElementById('f-project');
+    if (!sel) return;
+    projs.forEach(name => {
+      if (![...sel.options].some(o => o.value === name)) {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = name;
+        sel.appendChild(opt);
+      }
+    });
+  } catch(e) {}
+}
+function showAddProject() {
+  document.getElementById('add-project-row').style.display = 'block';
+  document.getElementById('f-project-new').focus();
+}
+function hideAddProject() {
+  document.getElementById('add-project-row').style.display = 'none';
+  document.getElementById('f-project-new').value = '';
+}
+function confirmAddProject() {
+  const name = document.getElementById('f-project-new').value.trim();
+  if (!name) { showToast('Vui lòng nhập tên dự án', 'err'); return; }
+  const sel = document.getElementById('f-project');
+  if ([...sel.options].some(o => o.value === name)) {
+    showToast('Dự án này đã tồn tại', 'err'); return;
+  }
+  const opt = document.createElement('option');
+  opt.value = opt.textContent = name;
+  sel.appendChild(opt);
+  sel.value = name;
+  try {
+    const projs = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]');
+    projs.push(name);
+    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projs));
+  } catch(e) {}
+  hideAddProject();
+  saveLastValues();
+  showToast('✓ Đã thêm dự án: ' + name, 'ok');
+}
 // ════════════════════════════════════════════════════════════════
 // DASHBOARD JS
 // ════════════════════════════════════════════════════════════════
