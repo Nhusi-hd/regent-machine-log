@@ -440,7 +440,8 @@ input.formula {
         </div>
         <div class="f">
           <div class="f-label">Ngày <span class="badge badge-m">Nhập tay</span></div>
-          <input class="manual" type="date" id="f-date">
+          <input class="manual" type="date" id="f-date"
+            onblur="const v=normalizeDate(this.value); if(v&&v!==this.value) this.value=v;">
         </div>
       </div>
       <div class="fg3 mt10">
@@ -978,6 +979,42 @@ function removeDefectRow(btn) {
 }
 
 // ── Build payload ──────────────────────────────────────────────
+// ── Chuẩn hóa ngày → YYYY-MM-DD bất kể định dạng đầu vào ────────
+function normalizeDate(raw) {
+  if (!raw) return '';
+  const s = raw.trim();
+
+  // Đã đúng YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // DD/MM/YYYY hoặc DD-MM-YYYY (kiểu Việt Nam)
+  const dmy = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+
+  // MM/DD/YYYY (kiểu Mỹ)
+  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdy) {
+    const [, m, d, y] = mdy;
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+
+  // Fallback: dùng Date object để parse
+  try {
+    const dt = new Date(s);
+    if (!isNaN(dt)) {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2,'0');
+      const d = String(dt.getDate()).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    }
+  } catch(e) {}
+
+  return s; // trả nguyên nếu không parse được
+}
+
 function buildPayload() {
   const defects = [];
   document.querySelectorAll('#defect-rows tr').forEach(tr => {
@@ -988,7 +1025,7 @@ function buildPayload() {
   return {
     project:               g('f-project')?.value || '',
     mo_color:              g('f-mo').value.trim(),
-    date:                  g('f-date').value,
+    date:                  normalizeDate(g('f-date').value),
     machine_line:          g('f-machine').value.trim(),
     sam:                   gn('f-sam'),
     standard_working_time: gn('f-swt'),
