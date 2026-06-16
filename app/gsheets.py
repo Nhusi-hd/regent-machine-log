@@ -68,6 +68,71 @@ COLOR_MAP = {
     "BLUE":   C_BLUE,
 }
 
+def _tab_name_for_month(proj_name: str, year: int, month: int) -> str:
+    """Tên tab = ProjectName_MMM-YYYY, tối đa 31 ký tự."""
+    suffix = f"_{calendar.month_abbr[month]}{year}"
+    return (proj_name[:31 - len(suffix)] + suffix)[:31]
+
+
+def _read_tab_header(service, spreadsheet_id: str, tab_name: str) -> dict:
+    """
+    Đọc row 2 (header ngày) của tab hiện có.
+    Trả về {date_str: col_index (0-based)} hoặc {} nếu tab chưa có.
+    """
+    try:
+        res = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f"'{tab_name}'!C2:ZZ2",
+        ).execute()
+        headers = res.get("values", [[]])[0]
+        date_map = {}
+        for i, label in enumerate(headers):
+            # label dạng "05-Jun" → parse lại thành date để map
+            date_map[label] = i + 2   # col index 0-based (C=2)
+        return date_map
+    except Exception:
+        return {}
+
+
+def _col_letter_for_day(working_days: list, target_date: str) -> int:
+    """
+    Trả về column index (0-based) của ngày target_date trong working_days.
+    Col A=0, B=1, C=2 (ngày đầu tiên), ...
+    """
+    from datetime import date as _date
+    y, m, d = map(int, target_date.split("-"))
+    dt = _date(y, m, d)
+    try:
+        return working_days.index(dt) + 2   # +2 vì A=section, B=label
+    except ValueError:
+        return -1
+
+
+def _delete_old_month_tabs(service, spreadsheet_id: str,
+                            proj_name: str, current_year: int, current_month: int):
+    """
+    Xóa tab tháng trước của cùng project (nếu sang tháng mới).
+    Chỉ xóa tab tháng liền trước (prev_month).
+    """
+    import datetime
+    prev = datetime.date(current_year, current_month, 1) - datetime.timedelta(days=1)
+    prev_tab = _tab_name_for_month(proj_name, prev.year, prev.month)
+
+    meta     = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    existing = {s["properties"]["title"]: s["properties"]["sheetId"]
+                for s in meta["sheets"]}
+
+    if prev_tab in existing and len(existing) > 1:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": [{"deleteSheet": {
+                "sheetId": existing[prev_tab]
+            }}]}
+        ).execute()
+        return prev_tab
+    return None
+
+
 def _get_service():
     try:
         from google.oauth2.service_account import Credentials
@@ -213,27 +278,16 @@ def write_monthly_sheet(records: list, year: int, month: int,
     for proj_name, proj_records in proj_map.items():
         date_map = {r["date"]: r for r in proj_records}
 
-        # ── Tạo/lấy tab ───────────────────────────────────────────
-        tab_name = (proj_name[:28] + tab_suffix)[:31]
+        # ── Tên tab theo tháng: "ProjectName_Jun2025" ─────────────
+        tab_name = _tab_name_for_month(proj_name, year, month)
         meta     = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         existing = {s["properties"]["title"]: s["properties"]["sheetId"]
                     for s in meta["sheets"]}
 
-        if tab_name in existing:
-            # Xóa nội dung cũ để ghi lại
-            sheet_id = existing[tab_name]
-            service.spreadsheets().values().clear(
-                spreadsheetId=spreadsheet_id,
-                range=f"'{tab_name}'",
-                body={}
-            ).execute()
-            # Bỏ merge cũ
-            _fmt([{"unmergeCells": {"range": {
-                "sheetId": sheet_id,
-                "startRowIndex": 0, "endRowIndex": 200,
-                "startColumnIndex": 0, "endColumnIndex": 50,
-            }}}], service, spreadsheet_id)
-        else:
+        is_new_tab = tab_name not in existing
+
+        if is_new_tab:
+            # Tạo tab mới — khởi tạo toàn bộ layout
             res = service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id,
                 body={"requests": [{"addSheet": {
@@ -241,6 +295,18 @@ def write_monthly_sheet(records: list, year: int, month: int,
                 }}]}
             ).execute()
             sheet_id = res["replies"][0]["addSheet"]["properties"]["sheetId"]
+
+            # Xóa tab tháng trước nếu sang tháng mới
+            deleted = _delete_old_month_tabs(
+                service, spreadsheet_id, proj_name, year, month)
+            if deleted:
+                print(f"[gsheets] Deleted old tab: {deleted}")
+        else:
+            # Tab đã có → chỉ cập nhật cột ngày, KHÔNG xóa data cũ
+            sheet_id = existing[tab_name]
+
+            # Nếu tab đã có, chỉ ghi đè các cột ngày trong records này
+            # rồi skip phần ghi toàn bộ values (dùng upsert riêng bên dưới)
 
         # ── Chuẩn bị dữ liệu ──────────────────────────────────────
         # Thu thập tất cả tên lỗi
@@ -266,33 +332,23 @@ def write_monthly_sheet(records: list, year: int, month: int,
         R_TOTAL     = R_DEFECT_E
         TOTAL_ROWS  = R_TOTAL + 1
 
-        # ── Ghi giá trị (values) ──────────────────────────────────
-        all_values = []
+        # ── Build toàn bộ values cho tab MỚI, hoặc upsert cột cho tab CŨ ──
 
-        # Row 0: Title
-        title_row = [f"DAILY MACHINE PERFORMANCE LOG — {proj_name.upper()} — {month_abbr}-{year}"]
-        title_row += [""] * (num_cols - 1)
-        all_values.append(title_row)
-
-        # Row 1: Date header
-        date_hdr = ["", "Date"]
-        for d in working_days:
-            date_hdr.append(f"{d.day:02d}-{month_abbr}")
-        all_values.append(date_hdr)
-
-        # Rows Overall
-        for label, field, color, is_formula in OVERALL_ROWS:
-            row = ["", label]
-            for d in working_days:
-                date_str = d.strftime("%Y-%m-%d")
-                rec      = date_map.get(date_str)
-                val      = ""
+        def _build_col_values(target_day_dt):
+            """Lấy giá trị 1 cột ngày (list theo thứ tự rows)."""
+            date_str = target_day_dt.strftime("%Y-%m-%d")
+            rec      = date_map.get(date_str)
+            col_vals = []
+            # Title + Date header = 2 rows đầu không có data
+            col_vals.append(None)
+            col_vals.append(f"{target_day_dt.day:02d}-{month_abbr}")
+            # Overall rows
+            for label, field, color, is_formula in OVERALL_ROWS:
+                val = ""
                 if rec:
                     v = rec.get(field)
                     if v is not None:
                         if field in ("eff_pct","defect_rate_pct","mc_utilization_pct"):
-                            # Chia 100 → dạng thập phân 0.xx để Google Sheets
-                            # hiển thị đúng khi format PERCENT (tránh nhân 100 lần)
                             val = round(float(v) / 100, 4)
                         elif field in ("target_output_day","actual_output_day_hc",
                                        "actual_output_day_mc","manual_output_day_hc",
@@ -301,46 +357,108 @@ def write_monthly_sheet(records: list, year: int, month: int,
                             val = int(v)
                         else:
                             val = v
-                row.append(val)
-            all_values.append(row)
-
-        # Row "Name" (defect header)
-        name_row = ["", "Name"] + [""] * num_days
-        all_values.append(name_row)
-
-        # Defect rows
-        if defect_names:
+                col_vals.append(val)
+            # Name header row
+            col_vals.append("")
+            # Defect rows
             for dname in defect_names:
-                row = ["", dname]
+                qty = ""
+                if rec:
+                    for def_item in (rec.get("defects") or []):
+                        if def_item.get("name") == dname:
+                            qty = int(def_item.get("qty", 0)) or ""
+                            break
+                col_vals.append(qty)
+            if not defect_names:
+                col_vals.append("")
+            # Total defect
+            col_vals.append(int(rec.get("total_defect", 0)) if rec else "")
+            return col_vals
+
+        if is_new_tab:
+            # ── Ghi toàn bộ (tab mới) ─────────────────────────────
+            all_values = []
+            # Row 0: Title
+            title_row = [f"DAILY MACHINE PERFORMANCE LOG — {proj_name.upper()} — {month_abbr}-{year}"]
+            title_row += [""] * (num_cols - 1)
+            all_values.append(title_row)
+            # Row 1: Date header
+            date_hdr = ["", "Date"] + [f"{d.day:02d}-{month_abbr}" for d in working_days]
+            all_values.append(date_hdr)
+            # Overall rows
+            for label, field, color, is_formula in OVERALL_ROWS:
+                row = ["", label]
                 for d in working_days:
                     date_str = d.strftime("%Y-%m-%d")
                     rec      = date_map.get(date_str)
-                    qty      = ""
+                    val      = ""
                     if rec:
-                        for def_item in (rec.get("defects") or []):
-                            if def_item.get("name") == dname:
-                                qty = int(def_item.get("qty", 0)) or ""
-                                break
-                    row.append(qty)
+                        v = rec.get(field)
+                        if v is not None:
+                            if field in ("eff_pct","defect_rate_pct","mc_utilization_pct"):
+                                val = round(float(v) / 100, 4)
+                            elif field in ("target_output_day","actual_output_day_hc",
+                                           "actual_output_day_mc","manual_output_day_hc",
+                                           "machine_working_time","changeover_time",
+                                           "breakdown_time","idle_time"):
+                                val = int(v)
+                            else:
+                                val = v
+                    row.append(val)
                 all_values.append(row)
+            # Name header
+            all_values.append(["", "Name"] + [""] * num_days)
+            # Defect rows
+            if defect_names:
+                for dname in defect_names:
+                    row = ["", dname]
+                    for d in working_days:
+                        date_str = d.strftime("%Y-%m-%d")
+                        rec      = date_map.get(date_str)
+                        qty      = ""
+                        if rec:
+                            for def_item in (rec.get("defects") or []):
+                                if def_item.get("name") == dname:
+                                    qty = int(def_item.get("qty", 0)) or ""
+                                    break
+                        row.append(qty)
+                    all_values.append(row)
+            else:
+                all_values.append(["", ""] + [""] * num_days)
+            # Total defect
+            total_row = ["Total defect", ""]
+            for d in working_days:
+                date_str = d.strftime("%Y-%m-%d")
+                rec      = date_map.get(date_str)
+                total_row.append(int(rec.get("total_defect", 0)) if rec else "")
+            all_values.append(total_row)
+
+            service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=f"'{tab_name}'!A1",
+                valueInputOption="USER_ENTERED",
+                body={"values": all_values},
+            ).execute()
+
         else:
-            all_values.append(["", ""] + [""] * num_days)
-
-        # Total defect row
-        total_row = ["Total defect", ""]
-        for d in working_days:
-            date_str = d.strftime("%Y-%m-%d")
-            rec      = date_map.get(date_str)
-            total_row.append(int(rec.get("total_defect", 0)) if rec else "")
-        all_values.append(total_row)
-
-        # Ghi tất cả giá trị 1 lần
-        service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range=f"'{tab_name}'!A1",
-            valueInputOption="USER_ENTERED",
-            body={"values": all_values},
-        ).execute()
+            # ── Upsert: chỉ ghi đúng cột ngày có trong records ────
+            from googleapiclient.errors import HttpError
+            for d in working_days:
+                date_str = d.strftime("%Y-%m-%d")
+                if date_str not in date_map:
+                    continue   # bỏ qua ngày không có record mới
+                col_idx = working_days.index(d) + 2   # A=0,B=1,C=2,...
+                col_letter = chr(ord('A') + col_idx) if col_idx < 26 else                              chr(ord('A') + col_idx // 26 - 1) + chr(ord('A') + col_idx % 26)
+                col_data = _build_col_values(d)
+                # Ghi từng cell theo cột (bỏ row 0 title)
+                # Dùng update range = COL2:COL(TOTAL_ROWS)
+                range_str = f"'{tab_name}'!{col_letter}1:{col_letter}{TOTAL_ROWS + 1}"
+                service.spreadsheets().values().update(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_str,
+                    valueInputOption="USER_ENTERED",
+                    body={"values": [[v] for v in col_data]},
+                ).execute()
 
         # ── Formatting requests ────────────────────────────────────
         reqs = []
