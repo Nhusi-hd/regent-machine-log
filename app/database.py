@@ -117,6 +117,10 @@ _FIELDS = [
 ]
 
 def save_record(entry, computed: dict) -> int:
+    """
+    Upsert an toàn: SELECT trước → INSERT nếu chưa có, UPDATE nếu đã có.
+    Không phụ thuộc vào UNIQUE constraint trong DB.
+    """
     defects_json = json.dumps([d.dict() for d in entry.defects])
     values = [
         entry.mo_color, entry.machine_line, entry.sam,
@@ -137,29 +141,39 @@ def save_record(entry, computed: dict) -> int:
     try:
         cur = conn.cursor()
 
-        if USE_POSTGRES:
-            # PostgreSQL: INSERT ... ON CONFLICT (project, date) DO UPDATE
-            set_clause = ", ".join(f"{f} = EXCLUDED.{f}" for f in _FIELDS)
-            sql = f"""
-                INSERT INTO logs (project, date, {", ".join(_FIELDS)})
-                VALUES ({PH}, {PH}, {", ".join([PH]*len(_FIELDS))})
-                ON CONFLICT (project, date) DO UPDATE SET
-                    {set_clause},
-                    created_at = NOW()
-                RETURNING id
-            """
-            cur.execute(sql, [entry.project, entry.date] + values)
-            row_id = cur.fetchone()["id"]
+        # ── Bước 1: Kiểm tra record đã tồn tại chưa ──────────────
+        cur.execute(
+            f"SELECT id FROM logs WHERE project={PH} AND date={PH} LIMIT 1",
+            (entry.project, entry.date)
+        )
+        existing = cur.fetchone()
 
-        else:
-            # SQLite: INSERT OR REPLACE
+        if existing is None:
+            # ── Bước 2a: INSERT mới ────────────────────────────────
             all_fields = ["project", "date"] + _FIELDS
-            sql = f"""
-                INSERT OR REPLACE INTO logs ({", ".join(all_fields)})
+            sql_insert = f"""
+                INSERT INTO logs ({", ".join(all_fields)})
                 VALUES ({", ".join([PH] * len(all_fields))})
             """
-            cur.execute(sql, [entry.project, entry.date] + values)
-            row_id = cur.lastrowid
+            cur.execute(sql_insert, [entry.project, entry.date] + values)
+
+            if USE_POSTGRES:
+                cur.execute("SELECT lastval()")
+                row_id = cur.fetchone()[0]
+            else:
+                row_id = cur.lastrowid
+
+        else:
+            # ── Bước 2b: UPDATE record hiện có ────────────────────
+            existing_id = existing["id"] if isinstance(existing, dict) else existing[0]
+            set_clause  = ", ".join(f"{f} = {PH}" for f in _FIELDS)
+            sql_update  = f"""
+                UPDATE logs
+                SET {set_clause}
+                WHERE id = {PH}
+            """
+            cur.execute(sql_update, values + [existing_id])
+            row_id = existing_id
 
         conn.commit()
         return row_id
