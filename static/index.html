@@ -1324,6 +1324,18 @@ function confirmAddProject() {
 // ════════════════════════════════════════════════════════════════
 let DB_CHARTS = {};
 
+// ── Gộp data trùng ngày: giữ record mới nhất (id lớn nhất) ─────
+function deduplicateByDate(data) {
+  const map = {};
+  data.forEach(r => {
+    const key = (r.project || '') + '|' + r.date;
+    if (!map[key] || (r.id || 0) > (map[key].id || 0)) {
+      map[key] = r;
+    }
+  });
+  return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function loadDashboard() {
   const proj = document.getElementById('db-project')?.value || '';
   const from = document.getElementById('db-from')?.value || '';
@@ -1335,15 +1347,17 @@ function loadDashboard() {
   fetch(url, { signal: AbortSignal.timeout(8000) })
     .then(r => r.json())
     .then(all => {
-      const data = all.filter(r => {
+      const filtered = all.filter(r => {
         if (from && r.date < from) return false;
         if (to   && r.date > to)   return false;
         return true;
-      }).sort((a,b) => a.date.localeCompare(b.date));
+      });
+      // Gộp trùng ngày — giữ record mới nhất theo (project, date)
+      const data = deduplicateByDate(filtered);
       if (!data.length) { showToast('Không có dữ liệu trong khoảng này', 'err'); return; }
       renderDBKPIs(data);
       renderDBCharts(data);
-      showToast('✓ Dashboard: ' + data.length + ' records', 'ok');
+      showToast(`✓ Dashboard: ${data.length} ngày (${filtered.length} records)`, 'ok');
     })
     .catch(e => showToast('Lỗi: ' + e.message, 'err'))
     .finally(() => { if(btn){ btn.disabled=false; btn.textContent='📊 Xem báo cáo'; } });
