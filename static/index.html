@@ -808,53 +808,67 @@ input.formula {
     <span style="flex:1;height:1px;background:var(--gray-bd);display:block;margin-left:4px;"></span>
   </div>
 
-  <!-- Chart 1: Performance/Day — combo bar+line+secondary axis -->
-  <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;
-              box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:12px;">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+  <!-- ── CHART STYLE ── -->
+  <style>
+  .chart-box{background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;
+    padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:12px;}
+  .chart-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
+  .chart-title{font-size:12px;font-weight:600;color:var(--text);}
+  .chart-sub{font-size:10px;color:var(--gray-txt);margin-top:2px;}
+  /* Filter toggle buttons */
+  .toggle-bar{display:flex;flex-wrap:wrap;gap:5px;padding:8px 0 2px;}
+  .tog-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;
+    border-radius:99px;border:1.5px solid transparent;font-size:10px;font-weight:600;
+    cursor:pointer;transition:all .15s;user-select:none;background:var(--gray-bg);}
+  .tog-btn .tog-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .tog-btn.active{border-color:currentColor;background:var(--white);}
+  .tog-btn.inactive{opacity:0.38;text-decoration:line-through;}
+  /* Data label toggle */
+  .label-btn{height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--gray-bd);
+    background:var(--white);font-size:10px;font-weight:600;cursor:pointer;
+    color:var(--text-2);white-space:nowrap;transition:all .15s;}
+  .label-btn.on{background:#1A2744;color:#fff;border-color:#1A2744;}
+  .label-btn:hover{opacity:.85;}
+  </style>
+
+  <!-- Chart 1: Performance / Day -->
+  <div class="chart-box">
+    <div class="chart-topbar">
       <div>
-        <div style="font-size:12px;font-weight:600;">Performance / Day</div>
-        <div style="font-size:10px;color:var(--gray-txt);margin-top:2px;">
-          Sản lượng theo ngày (cột trái) · EFF / Defect / MC Util (đường phải)
-        </div>
+        <div class="chart-title">📊 Performance / Day</div>
+        <div class="chart-sub">Sản lượng theo ngày (cột trái) · EFF / Defect / MC Util (đường phải)</div>
       </div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
-        <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:#dbeafe;color:#1d4ed8;">Cột = Sản lượng</span>
-        <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:#dcfce7;color:#15803d;">Đường = % (trục phải)</span>
-      </div>
+      <button class="label-btn" id="lbl-btn-day" onclick="toggleLabels('perf-day')">🔢 Hiện số liệu</button>
     </div>
-    <canvas id="db-chart-perf-day" height="200"></canvas>
+    <div class="toggle-bar" id="tog-perf-day"></div>
+    <canvas id="db-chart-perf-day" height="220"></canvas>
   </div>
 
-  <!-- Chart 2: Performance/h — combo bar+line+secondary axis -->
-  <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;
-              box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:12px;">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+  <!-- Chart 2: Performance / h -->
+  <div class="chart-box">
+    <div class="chart-topbar">
       <div>
-        <div style="font-size:12px;font-weight:600;">Performance / h</div>
-        <div style="font-size:10px;color:var(--gray-txt);margin-top:2px;">
-          Sản lượng theo giờ (cột trái) · EFF / Defect / MC Util (đường phải)
-        </div>
+        <div class="chart-title">⏱ Performance / h</div>
+        <div class="chart-sub">Sản lượng theo giờ (cột trái) · EFF / Defect / MC Util (đường phải)</div>
       </div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
-        <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:#dbeafe;color:#1d4ed8;">Cột = Sản lượng/h</span>
-        <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:#dcfce7;color:#15803d;">Đường = % (trục phải)</span>
-      </div>
+      <button class="label-btn" id="lbl-btn-h" onclick="toggleLabels('perf-h')">🔢 Hiện số liệu</button>
     </div>
-    <canvas id="db-chart-perf-h" height="200"></canvas>
+    <div class="toggle-bar" id="tog-perf-h"></div>
+    <canvas id="db-chart-perf-h" height="220"></canvas>
   </div>
 
-  <!-- Chart 3: Time breakdown Pie -->
-  <div style="background:var(--white);border:1px solid var(--gray-bd);border-radius:10px;padding:16px;
-              box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:16px;">
-    <div style="margin-bottom:12px;">
-      <div style="font-size:12px;font-weight:600;">Time Chart (by day) — Pie</div>
-      <div style="font-size:10px;color:var(--gray-txt);margin-top:2px;">
-        Phân bổ thời gian máy trung bình: Working / Change-over / Breakdown / Idle
+  <!-- Chart 3: Time Pie -->
+  <div class="chart-box" style="margin-bottom:16px;">
+    <div class="chart-topbar">
+      <div>
+        <div class="chart-title">🕐 Time Chart (by day) — Pie</div>
+        <div class="chart-sub">Phân bổ thời gian máy trung bình · Working / Change-over / Breakdown / Idle</div>
       </div>
+      <button class="label-btn" id="lbl-btn-pie" onclick="toggleLabels('time-pie')">🔢 Hiện số liệu</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center;">
-      <canvas id="db-chart-time-pie" height="220"></canvas>
+    <div class="toggle-bar" id="tog-time-pie"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center;margin-top:8px;">
+      <canvas id="db-chart-time-pie" height="240"></canvas>
       <div id="db-time-pie-legend" style="font-size:12px;line-height:2;"></div>
     </div>
   </div>
@@ -1487,112 +1501,175 @@ function renderDBCharts(data) {
     data:{ labels:['Chưa có dữ liệu'], datasets:[{data:[1],backgroundColor:['#E5E7EB']}] },
     options:{ plugins:{legend:{display:false}}, animation:{duration:0} } });
 
-  // ── CHART 1: Performance / Day ──────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // CHART CONFIG: dataset definitions
+  // ══════════════════════════════════════════════════════════════
+  const PERF_DAY_DS = (data) => [
+    { type:'bar',  key:'target_output_day',    label:'Target/day (pcs)',       yAxisID:'y',  backgroundColor:'#1A274444', borderColor:'#1A2744', borderWidth:1, borderRadius:3, barPercentage:0.65 },
+    { type:'bar',  key:'actual_output_day_hc', label:'Actual HC/day (pcs)',    yAxisID:'y',  backgroundColor:'#2563EBBB', borderRadius:3, barPercentage:0.65 },
+    { type:'bar',  key:'actual_output_day_mc', label:'Actual MC/day (pcs)',    yAxisID:'y',  backgroundColor:'#0D9488BB', borderRadius:3, barPercentage:0.65 },
+    { type:'bar',  key:'manual_output_day_hc', label:'Manual HC/day (pcs)',    yAxisID:'y',  backgroundColor:'#7C3AEDBB', borderRadius:3, barPercentage:0.65 },
+    { type:'line', key:'eff_pct',              label:'EFF (%)',                yAxisID:'y2', borderColor:'#F59E0B', borderWidth:2, pointRadius:3, pointBackgroundColor:'#F59E0B', tension:0.3, backgroundColor:'transparent' },
+    { type:'line', key:'defect_rate_pct',      label:'Defect rate (%)',        yAxisID:'y2', borderColor:'#DC2626', borderWidth:2, pointRadius:3, pointBackgroundColor:'#DC2626', borderDash:[4,3], tension:0.3, backgroundColor:'transparent' },
+    { type:'line', key:'mc_utilization_pct',   label:'MC Util (%)',            yAxisID:'y2', borderColor:'#16A34A', borderWidth:2, pointRadius:3, pointBackgroundColor:'#16A34A', borderDash:[2,2], tension:0.3, backgroundColor:'transparent' },
+  ].map(d => ({ ...d, data: data.map(r => r[d.key] ?? null) }));
+
+  const PERF_H_DS = (data) => [
+    { type:'bar',  key:'auto_target_h_hc',   label:'Auto Target/h/HC',         yAxisID:'y',  backgroundColor:'#1A274444', borderColor:'#1A2744', borderWidth:1, borderRadius:3, barPercentage:0.65 },
+    { type:'bar',  key:'auto_output_h_hc',   label:'Auto output/h/HC (pcs)',   yAxisID:'y',  backgroundColor:'#2563EBBB', borderRadius:3, barPercentage:0.65 },
+    { type:'bar',  key:'actual_output_h_mc', label:'Actual output/h/MC (pcs)', yAxisID:'y',  backgroundColor:'#0D9488BB', borderRadius:3, barPercentage:0.65 },
+    { type:'bar',  key:'manual_output_h_hc', label:'Manual output/h/HC (pcs)', yAxisID:'y',  backgroundColor:'#7C3AEDBB', borderRadius:3, barPercentage:0.65 },
+    { type:'line', key:'eff_pct',            label:'EFF (%)',                   yAxisID:'y2', borderColor:'#F59E0B', borderWidth:2, pointRadius:3, pointBackgroundColor:'#F59E0B', tension:0.3, backgroundColor:'transparent' },
+    { type:'line', key:'defect_rate_pct',    label:'Defect rate (%)',           yAxisID:'y2', borderColor:'#DC2626', borderWidth:2, pointRadius:3, pointBackgroundColor:'#DC2626', borderDash:[4,3], tension:0.3, backgroundColor:'transparent' },
+    { type:'line', key:'mc_utilization_pct', label:'MC Util (%)',               yAxisID:'y2', borderColor:'#16A34A', borderWidth:2, pointRadius:3, pointBackgroundColor:'#16A34A', borderDash:[2,2], tension:0.3, backgroundColor:'transparent' },
+  ].map(d => ({ ...d, data: data.map(r => r[d.key] ?? null) }));
+
+  // State: bật/tắt dataset và data labels
+  const CHART_STATES = {
+    'perf-day': { hidden: new Set(), labels: false },
+    'perf-h':   { hidden: new Set(), labels: false },
+    'time-pie': { hidden: new Set(), labels: false },
+  };
+
+  // ── Build toggle bar ──────────────────────────────────────────────
+  function buildToggleBar(chartKey, datasets) {
+    const bar = document.getElementById(`tog-${chartKey}`);
+    if (!bar) return;
+    bar.innerHTML = datasets.map((ds, i) => {
+      const color = ds.borderColor || ds.backgroundColor?.replace(/BB|CC|44/,'') || '#888';
+      return `<button class="tog-btn active" id="tog-${chartKey}-${i}"
+        onclick="toggleDataset('${chartKey}', ${i})"
+        style="color:${color};">
+        <span class="tog-dot" style="background:${color};"></span>
+        ${ds.label}
+      </button>`;
+    }).join('');
+  }
+
+  // ── Toggle 1 dataset ─────────────────────────────────────────────
+  function toggleDataset(chartKey, dsIdx) {
+    const chartId = `db-chart-${chartKey}`;
+    const chart   = DB_CHARTS[chartId];
+    if (!chart) return;
+    const state = CHART_STATES[chartKey];
+    const meta  = chart.getDatasetMeta(dsIdx);
+    const btn   = document.getElementById(`tog-${chartKey}-${dsIdx}`);
+
+    if (state.hidden.has(dsIdx)) {
+      state.hidden.delete(dsIdx);
+      meta.hidden = false;
+      btn?.classList.replace('inactive','active');
+    } else {
+      state.hidden.add(dsIdx);
+      meta.hidden = true;
+      btn?.classList.replace('active','inactive');
+    }
+    chart.update();
+  }
+
+  // ── Toggle data labels (hiển thị số trên từng điểm/cột) ─────────
+  function toggleLabels(chartKey) {
+    const chartId = `db-chart-${chartKey}`;
+    const chart   = DB_CHARTS[chartId];
+    if (!chart) return;
+    const state  = CHART_STATES[chartKey];
+    state.labels = !state.labels;
+
+    const btnMap = { 'perf-day':'lbl-btn-day', 'perf-h':'lbl-btn-h', 'time-pie':'lbl-btn-pie' };
+    const btn    = document.getElementById(btnMap[chartKey]);
+    if (btn) {
+      btn.textContent = state.labels ? '🔢 Ẩn số liệu' : '🔢 Hiện số liệu';
+      btn.classList.toggle('on', state.labels);
+    }
+
+    // Cập nhật datalabels cho từng dataset
+    chart.data.datasets.forEach((ds, i) => {
+      if (!ds.datalabels) ds.datalabels = {};
+      ds.datalabels.display = state.labels;
+    });
+
+    // Pie chart: toggle label trực tiếp trên options
+    if (chartKey === 'time-pie') {
+      chart.options.plugins.datalabels = { display: state.labels };
+    }
+    chart.update();
+  }
+
+  // ── Combo chart options (dùng chung cho Day và h) ────────────────
+  function comboOptions(yTitle) {
+    return {
+      animation: { duration: 300 },
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },   // dùng toggle bar thay legend
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (v === null || v === undefined) return null;
+              const suffix = ctx.dataset.yAxisID === 'y2' ? '%' : ' pcs';
+              return ` ${ctx.dataset.label}: ${v.toLocaleString()}${suffix}`;
+            }
+          }
+        },
+      },
+      scales: {
+        x: { ...DB_BASE_SCALES.x,
+          ticks: { ...DB_TICK, maxRotation:45, minRotation:0 } },
+        y: { ...DB_BASE_SCALES.y, position:'left',
+          title:{ display:true, text:yTitle, font:{size:10} }, min:0 },
+        y2: { ...DB_BASE_SCALES.y, position:'right',
+          grid:{ drawOnChartArea:false },
+          title:{ display:true, text:'Tỷ lệ (%)', font:{size:10} },
+          min:0, max:120,
+          ticks:{ ...DB_TICK, callback: v => v+'%' } },
+      }
+    };
+  }
+
+  // ── CHART 1: Performance / Day ────────────────────────────────────
+  const dsDay = PERF_DAY_DS(data);
+  // Thêm datalabels mặc định (ẩn)
+  dsDay.forEach(ds => {
+    ds.datalabels = {
+      display: false,
+      anchor: ds.type==='bar' ? 'end' : 'top',
+      align:  ds.type==='bar' ? 'end' : 'top',
+      offset: 2,
+      font:   { size:9, weight:'600' },
+      color:  ds.borderColor || '#444',
+      formatter: (v) => v == null ? '' :
+        (ds.yAxisID==='y2' ? v+'%' : v >= 1000 ? (v/1000).toFixed(1)+'k' : v),
+      clamp: true,
+    };
+  });
+  buildToggleBar('perf-day', dsDay);
   dbMakeChart('db-chart-perf-day', {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        // Cột (trục Y trái)
-        { type:'bar', label:'Target/day (pcs)', yAxisID:'y',
-          data: data.map(r=>r.target_output_day??null),
-          backgroundColor:'#1A274455', borderColor:'#1A2744', borderWidth:1,
-          borderRadius:3, barPercentage:0.7 },
-        { type:'bar', label:'Actual HC/day (pcs)', yAxisID:'y',
-          data: data.map(r=>r.actual_output_day_hc??null),
-          backgroundColor:'#2563EBCC', borderRadius:3, barPercentage:0.7 },
-        { type:'bar', label:'Actual MC/day (pcs)', yAxisID:'y',
-          data: data.map(r=>r.actual_output_day_mc??null),
-          backgroundColor:'#0D9488CC', borderRadius:3, barPercentage:0.7 },
-        { type:'bar', label:'Manual HC/day (pcs)', yAxisID:'y',
-          data: data.map(r=>r.manual_output_day_hc??null),
-          backgroundColor:'#7C3AEDCC', borderRadius:3, barPercentage:0.7 },
-        // Đường (trục Y phải — %)
-        { type:'line', label:'EFF (%)', yAxisID:'y2',
-          data: data.map(r=>r.eff_pct??null),
-          borderColor:'#F59E0B', backgroundColor:'transparent',
-          borderWidth:2, pointRadius:3, pointBackgroundColor:'#F59E0B', tension:0.3 },
-        { type:'line', label:'Defect rate (%)', yAxisID:'y2',
-          data: data.map(r=>r.defect_rate_pct??null),
-          borderColor:'#DC2626', backgroundColor:'transparent',
-          borderWidth:2, pointRadius:3, pointBackgroundColor:'#DC2626',
-          borderDash:[4,3], tension:0.3 },
-        { type:'line', label:'MC Util (%)', yAxisID:'y2',
-          data: data.map(r=>r.mc_utilization_pct??null),
-          borderColor:'#16A34A', backgroundColor:'transparent',
-          borderWidth:2, pointRadius:3, pointBackgroundColor:'#16A34A',
-          borderDash:[2,2], tension:0.3 },
-      ]
-    },
-    options: {
-      animation:{duration:300},
-      interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{ display:true, position:'bottom',
-        labels:{font:{size:10},boxWidth:10,padding:8} } },
-      scales:{
-        x: DB_BASE_SCALES.x,
-        y: { ...DB_BASE_SCALES.y, position:'left',
-          title:{display:true, text:'Sản lượng (pcs)', font:{size:10}}, min:0 },
-        y2:{ ...DB_BASE_SCALES.y, position:'right', grid:{drawOnChartArea:false},
-          title:{display:true, text:'Tỷ lệ (%)', font:{size:10}},
-          min:0, max:120,
-          ticks:{...DB_TICK, callback:v=>v+'%'} },
-      }
-    }
+    data: { labels, datasets: dsDay },
+    options: comboOptions('Sản lượng (pcs)')
   });
 
-  // ── CHART 2: Performance / h ─────────────────────────────────────
+  // ── CHART 2: Performance / h ──────────────────────────────────────
+  const dsH = PERF_H_DS(data);
+  dsH.forEach(ds => {
+    ds.datalabels = {
+      display: false,
+      anchor: ds.type==='bar' ? 'end' : 'top',
+      align:  ds.type==='bar' ? 'end' : 'top',
+      offset: 2,
+      font:   { size:9, weight:'600' },
+      color:  ds.borderColor || '#444',
+      formatter: (v) => v == null ? '' :
+        (ds.yAxisID==='y2' ? v+'%' : v >= 1000 ? (v/1000).toFixed(1)+'k' : v),
+      clamp: true,
+    };
+  });
+  buildToggleBar('perf-h', dsH);
   dbMakeChart('db-chart-perf-h', {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        // Cột (trục Y trái)
-        { type:'bar', label:'Auto Target/h/HC', yAxisID:'y',
-          data: data.map(r=>r.auto_target_h_hc??null),
-          backgroundColor:'#1A274455', borderColor:'#1A2744', borderWidth:1,
-          borderRadius:3, barPercentage:0.7 },
-        { type:'bar', label:'Auto output/h/HC (pcs)', yAxisID:'y',
-          data: data.map(r=>r.auto_output_h_hc??null),
-          backgroundColor:'#2563EBCC', borderRadius:3, barPercentage:0.7 },
-        { type:'bar', label:'Actual output/h/MC (pcs)', yAxisID:'y',
-          data: data.map(r=>r.actual_output_h_mc??null),
-          backgroundColor:'#0D9488CC', borderRadius:3, barPercentage:0.7 },
-        { type:'bar', label:'Manual output/h/HC (pcs)', yAxisID:'y',
-          data: data.map(r=>r.manual_output_h_hc??null),
-          backgroundColor:'#7C3AEDCC', borderRadius:3, barPercentage:0.7 },
-        // Đường (trục Y phải — %)
-        { type:'line', label:'EFF (%)', yAxisID:'y2',
-          data: data.map(r=>r.eff_pct??null),
-          borderColor:'#F59E0B', backgroundColor:'transparent',
-          borderWidth:2, pointRadius:3, pointBackgroundColor:'#F59E0B', tension:0.3 },
-        { type:'line', label:'Defect rate (%)', yAxisID:'y2',
-          data: data.map(r=>r.defect_rate_pct??null),
-          borderColor:'#DC2626', backgroundColor:'transparent',
-          borderWidth:2, pointRadius:3, pointBackgroundColor:'#DC2626',
-          borderDash:[4,3], tension:0.3 },
-        { type:'line', label:'MC Util (%)', yAxisID:'y2',
-          data: data.map(r=>r.mc_utilization_pct??null),
-          borderColor:'#16A34A', backgroundColor:'transparent',
-          borderWidth:2, pointRadius:3, pointBackgroundColor:'#16A34A',
-          borderDash:[2,2], tension:0.3 },
-      ]
-    },
-    options: {
-      animation:{duration:300},
-      interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{ display:true, position:'bottom',
-        labels:{font:{size:10},boxWidth:10,padding:8} } },
-      scales:{
-        x: DB_BASE_SCALES.x,
-        y: { ...DB_BASE_SCALES.y, position:'left',
-          title:{display:true, text:'Sản lượng/giờ (pcs)', font:{size:10}}, min:0 },
-        y2:{ ...DB_BASE_SCALES.y, position:'right', grid:{drawOnChartArea:false},
-          title:{display:true, text:'Tỷ lệ (%)', font:{size:10}},
-          min:0, max:120,
-          ticks:{...DB_TICK, callback:v=>v+'%'} },
-      }
-    }
+    data: { labels, datasets: dsH },
+    options: comboOptions('Sản lượng/giờ (pcs)')
   });
 
   // ── CHART 3: Time Pie ─────────────────────────────────────────────
@@ -1605,53 +1682,90 @@ function renderDBCharts(data) {
   const tBreak   = avgTime('breakdown_time');
   const tIdle    = avgTime('idle_time');
   const tTotal   = tWorking + tChange + tBreak + tIdle || 1;
-  const pct = v => ((v/tTotal)*100).toFixed(1);
+  const pct      = v => ((v/tTotal)*100).toFixed(1);
 
   const pieColors = ['#16A34A','#D97706','#DC2626','#9CA3AF'];
   const pieLabels = ['Working','Change-over','Breakdown','Idle'];
   const pieVals   = [tWorking, tChange, tBreak, tIdle];
 
+  // Toggle bar cho pie (ẩn/hiện từng phần)
+  const pieDsForToggle = pieLabels.map((l,i) => ({
+    label: `${l} (${pct(pieVals[i])}%)`,
+    borderColor: pieColors[i],
+    backgroundColor: pieColors[i],
+  }));
+  buildToggleBar('time-pie', pieDsForToggle);
+
   dbMakeChart('db-chart-time-pie', {
-    type:'pie',
-    data:{
-      labels: pieLabels.map((l,i)=>`${l} (${pct(pieVals[i])}%)`),
-      datasets:[{
-        data: pieVals,
+    type: 'pie',
+    data: {
+      labels: pieLabels.map((l,i) => `${l}`),
+      datasets: [{
+        data:            pieVals,
         backgroundColor: pieColors,
-        borderWidth: 2,
-        borderColor: '#fff',
+        borderWidth:     2,
+        borderColor:     '#fff',
+        datalabels: {
+          display:    false,   // bật khi nhấn "Hiện số liệu"
+          color:      '#fff',
+          font:       { size:11, weight:'700' },
+          formatter:  (v, ctx) => {
+            const p = ((v / tTotal)*100).toFixed(1);
+            return p > 5 ? `${ctx.chart.data.labels[ctx.dataIndex]}\n${p}%` : '';
+          },
+        }
       }]
     },
-    options:{
-      animation:{duration:400},
-      plugins:{
-        legend:{ display:false },
-        tooltip:{ callbacks:{
-          label: ctx => {
-            const val = ctx.parsed;
-            const pctVal = ((val/tTotal)*100).toFixed(1);
-            return ` ${ctx.label.split(' (')[0]}: ${val} min (${pctVal}%)`;
+    options: {
+      animation:  { duration:400 },
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v   = ctx.parsed;
+              const p   = ((v/tTotal)*100).toFixed(1);
+              return ` ${ctx.label}: ${v} min  (${p}%)`;
+            }
           }
-        }}
+        },
       }
     }
   });
 
-  // Legend thủ công cho pie chart
+  // Override toggleDataset cho pie (ẩn/hiện slice)
+  const _origToggle = toggleDataset;
+  window.toggleDatasetPie = function(idx) {
+    const chart = DB_CHARTS['db-chart-time-pie'];
+    if (!chart) return;
+    const meta  = chart.getDatasetMeta(0);
+    const slice = meta.data[idx];
+    const btn   = document.getElementById(`tog-time-pie-${idx}`);
+    if (!slice) return;
+    slice.hidden = !slice.hidden;
+    btn?.classList.toggle('active',  !slice.hidden);
+    btn?.classList.toggle('inactive', slice.hidden);
+    chart.update();
+  };
+  // Patch toggle bar buttons cho pie
+  pieLabels.forEach((_, i) => {
+    const btn = document.getElementById(`tog-time-pie-${i}`);
+    if (btn) btn.setAttribute('onclick', `toggleDatasetPie(${i})`);
+  });
+
+  // Legend thủ công
   const legendEl = document.getElementById('db-time-pie-legend');
   if (legendEl) {
     legendEl.innerHTML = pieLabels.map((l,i) => `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <div style="width:14px;height:14px;border-radius:3px;flex-shrink:0;
-                    background:${pieColors[i]};"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="width:14px;height:14px;border-radius:3px;flex-shrink:0;background:${pieColors[i]};"></div>
         <div>
           <span style="font-weight:600;">${l}</span>
           <span style="color:var(--gray-txt);margin-left:6px;">
-            ${pieVals[i]} min &nbsp;·&nbsp; ${pct(pieVals[i])}%
+            ${pieVals[i]} min &nbsp;·&nbsp; <strong>${pct(pieVals[i])}%</strong>
           </span>
         </div>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
 
   // ── EFF by project horizontal bar
