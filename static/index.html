@@ -1525,6 +1525,11 @@ function renderDBCharts(data) {
   ].map(d => ({ ...d, data: data.map(r => r[d.key] ?? null) }));
 
   // State: bật/tắt dataset và data labels
+  // ════════════════════════════════════════════════════════════
+  // GLOBAL toggle functions — phải ở global scope để HTML onclick gọi được
+  // ════════════════════════════════════════════════════════════
+
+  // Trạng thái chart — khai báo global để toggleLabels/toggleDataset truy cập
   const CHART_STATES = {
     'perf-day': { hidden: new Set(), labels: false },
     'perf-h':   { hidden: new Set(), labels: false },
@@ -1546,8 +1551,8 @@ function renderDBCharts(data) {
     }).join('');
   }
 
-  // ── Toggle 1 dataset ─────────────────────────────────────────────
-  function toggleDataset(chartKey, dsIdx) {
+  // ── Toggle 1 dataset (exposed globally) ────────────────────────
+  window.toggleDataset = function(chartKey, dsIdx) {
     const chartId = `db-chart-${chartKey}`;
     const chart   = DB_CHARTS[chartId];
     if (!chart) return;
@@ -1565,10 +1570,10 @@ function renderDBCharts(data) {
       btn?.classList.replace('active','inactive');
     }
     chart.update();
-  }
+  };
 
-  // ── Toggle data labels (hiển thị số trên từng điểm/cột) ─────────
-  function toggleLabels(chartKey) {
+  // ── Toggle data labels (exposed globally) ──────────────────────
+  window.toggleLabels = function(chartKey) {
     const chartId = `db-chart-${chartKey}`;
     const chart   = DB_CHARTS[chartId];
     if (!chart) return;
@@ -1593,22 +1598,32 @@ function renderDBCharts(data) {
       chart.options.plugins.datalabels = { display: state.labels };
     }
     chart.update();
-  }
+  };
 
-  // ── Combo chart options (dùng chung cho Day và h) ────────────────
-  function comboOptions(yTitle) {
+  // ── Combo chart options ─────────────────────────────────────────
+  // yMaxLeft : giá trị max của trục Y trái (tính từ data thực tế)
+  // y2Max    : giá trị max của trục Y phải (thường là 120 cho %)
+  function comboOptions(yTitle, yMaxLeft, y2Max) {
+    // FIX: auto-scale Y trái theo data + padding 15%
+    const leftMax = yMaxLeft ? Math.ceil(yMaxLeft * 1.15 / 500) * 500 : undefined;
+    // FIX: Y phải cố định 0-120% để đường % không đè lên cột
+    const rightMax = y2Max || 120;
+
     return {
       animation: { duration: 300 },
       interaction: { mode:'index', intersect:false },
       plugins: {
-        legend: { display: false },   // dùng toggle bar thay legend
+        legend: { display: false },
         tooltip: {
           callbacks: {
             label: ctx => {
               const v = ctx.parsed.y;
               if (v === null || v === undefined) return null;
-              const suffix = ctx.dataset.yAxisID === 'y2' ? '%' : ' pcs';
-              return ` ${ctx.dataset.label}: ${v.toLocaleString()}${suffix}`;
+              const isRight = ctx.dataset.yAxisID === 'y2';
+              const val = isRight
+                ? v.toFixed(1) + '%'
+                : v.toLocaleString() + ' pcs';
+              return ` ${ctx.dataset.label}: ${val}`;
             }
           }
         },
@@ -1616,18 +1631,60 @@ function renderDBCharts(data) {
       scales: {
         x: { ...DB_BASE_SCALES.x,
           ticks: { ...DB_TICK, maxRotation:45, minRotation:0 } },
-        y: { ...DB_BASE_SCALES.y, position:'left',
-          title:{ display:true, text:yTitle, font:{size:10} }, min:0 },
-        y2: { ...DB_BASE_SCALES.y, position:'right',
-          grid:{ drawOnChartArea:false },
-          title:{ display:true, text:'Tỷ lệ (%)', font:{size:10} },
-          min:0, max:120,
-          ticks:{ ...DB_TICK, callback: v => v+'%' } },
+
+        // FIX 1: suggestedMax thay vì max cứng → tự mở rộng khi có đột biến
+        y: {
+          ...DB_BASE_SCALES.y,
+          position: 'left',
+          title: { display:true, text:yTitle, font:{size:10} },
+          min: 0,
+          suggestedMax: leftMax,   // co giãn theo data, không vỡ khung
+          ticks: {
+            ...DB_TICK,
+            callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v
+          }
+        },
+
+        // FIX 2: Y phải cố định 0-120%, grid tắt để không đè lên cột
+        y2: {
+          ...DB_BASE_SCALES.y,
+          position: 'right',
+          grid: { drawOnChartArea: false },  // không vẽ lưới đè lên cột
+          title: { display:true, text:'Tỷ lệ (%)', font:{size:10} },
+          min: 0,
+          max: rightMax,
+          ticks: { ...DB_TICK, callback: v => v + '%', stepSize: 20 }
+        },
       }
     };
   }
 
+  // Tính max value của các dataset thuộc trục Y trái
+  function calcYMax(datasets, data) {
+    let maxVal = 0;
+    datasets.forEach(ds => {
+      if (ds.yAxisID !== 'y2') {
+        data.forEach(r => {
+          const v = r[ds.key];
+          if (v && v > maxVal) maxVal = v;
+        });
+      }
+    });
+    return maxVal || 1000;
+  }
+
   // ── CHART 1: Performance / Day ────────────────────────────────────
+  // Alias defs để calcYMax truy cập key của từng dataset
+  // Lấy 1 sample để biết key list, không phụ thuộc vào data arg
+  const PERF_DAY_DEFS = PERF_DAY_DS([{
+    target_output_day:0, actual_output_day_hc:0, actual_output_day_mc:0,
+    manual_output_day_hc:0, eff_pct:0, defect_rate_pct:0, mc_utilization_pct:0
+  }]);
+  const PERF_H_DEFS = PERF_H_DS([{
+    auto_target_h_hc:0, auto_output_h_hc:0, actual_output_h_mc:0,
+    manual_output_h_hc:0, eff_pct:0, defect_rate_pct:0, mc_utilization_pct:0
+  }]);
+
   const dsDay = PERF_DAY_DS(data);
   // Thêm datalabels mặc định (ẩn)
   dsDay.forEach(ds => {
@@ -1647,7 +1704,7 @@ function renderDBCharts(data) {
   dbMakeChart('db-chart-perf-day', {
     type: 'bar',
     data: { labels, datasets: dsDay },
-    options: comboOptions('Sản lượng (pcs)')
+    options: comboOptions('Sản lượng (pcs)', calcYMax(PERF_DAY_DEFS, data))
   });
 
   // ── CHART 2: Performance / h ──────────────────────────────────────
@@ -1669,7 +1726,7 @@ function renderDBCharts(data) {
   dbMakeChart('db-chart-perf-h', {
     type: 'bar',
     data: { labels, datasets: dsH },
-    options: comboOptions('Sản lượng/giờ (pcs)')
+    options: comboOptions('Sản lượng/giờ (pcs)', calcYMax(PERF_H_DEFS, data))
   });
 
   // ── CHART 3: Time Pie ─────────────────────────────────────────────
